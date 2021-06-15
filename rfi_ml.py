@@ -44,10 +44,7 @@ class ToyGenerator:
             * np.cos(phase + freq * self.t)
             * np.exp(-(self.t - pos) ** 2 / (2 * sigma ** 2))
         )
-        #print('freq: ', freq)
-        #print('phase: ', phase)
-        #print('pos: ', pos)
-        #print('ampl: ',ampl)
+        
         return rfi
 
 
@@ -169,44 +166,19 @@ class RFIDetect:
                     % (epoch, epochs, i, len(g_trainloader), loss.item())
                     )
                 iters += 1
-            #self.netE.eval()
-            #self.netD.eval()
         
     def evaluate(self, g_test_array, ng_test_array, gauss_fact=torch.ones(1)):
-        
-        #if not hasattr(self,"netD"):
-        #    self.netD = self.Decoder(
-        #        z_dim=self.z_dim, hidden_dim=self.hidden_dim, out_dim=self.Np
-        #    ).cuda()
-        #    self.netE = self.Encoder(
-        #        input_dim=self.Np, hidden_dim=self.hidden_dim, z_dim=self.z_dim
-        #    ).cuda()
             
         self.netE.eval()
         self.netD.eval()
         
-        recons_out = []
-        #test = torch.stack([tin for tin in problem])
-        #testloader = DataLoader(
-        #    torch.utils.data.TensorDataset(test),
-        #    batch_size=len(test),
-        #    shuffle=True,
-        #    num_workers=self.ncores,
-        #    pin_memory=True,
-        #    drop_last=True,
-        #)
-        
+        recons_out = []       
         with torch.no_grad():
             sigs = g_test_array.float().cuda() + ng_test_array.float().cuda()
             gaussianized = torch.stack([gauss_fact * torch.from_numpy(self.Gaussianize(sig.cpu().numpy())) for sig in sigs]).cuda().float()
             modsig = sigs + gaussianized
             recons_out = self.netD(self.netE(modsig))
-            #for line in testloader:
-            #    line = line[0].float().cuda()
-            #    recons_out = self.netD(self.netE(line))
-            #    output.append(recons_out.cpu().numpy())
 
-            print(recons_out)
         return recons_out
     
     def plot_eval(self, recons_out, g_test_array, ng_test_array, Nepochs):
