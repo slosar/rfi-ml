@@ -128,3 +128,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 *.png
+
+#Plots and saved data subdirectories
+notebooks/rfi_ml
