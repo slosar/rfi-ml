@@ -126,30 +126,43 @@ class RFIDetect:
         rot = np.exp(1j * np.random.uniform(0, 2 * np.pi, len(fsig)))
         return np.fft.irfft((fsig * rot))
 
-    def train(self, g_train_array, ng_train_array, gauss_fact=torch.ones(1), lamb=1, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
+    #def train(self, g_train_array, ng_train_array, gauss_fact=torch.ones(1), lamb=1, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
+    def train(self, gauss_fact=torch.ones(1), lamb=1, batch_size = 32, lr=0.0002, betas=(0.5, 0.999), Ntrain=100000, Np=1024, Nrfi=1, sigma_low=20, sigma_high=50):
         
-        g_trainloader = DataLoader(
-            torch.utils.data.TensorDataset(g_train_array),
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=self.nworkers,
-            pin_memory=True,
-            drop_last=True,
-        )
+        g = torch.stack([torch.from_numpy(ToyGenerator.getGaussian(self)) for i in range(Ntrain)])
+        rfi_array = np.zeros((Ntrain, Np), dtype=float)
+        for i in range(Ntrain):
+            rfi_timestream = np.zeros(Np)
+            for j in range(Nrfi):
+                rfi_timestream += ToyGenerator.getNonGaussianLocalized(sigma=(sigma_low, sigma_high)) 
+                #rfi_timestream += t.getNonGaussianLocalized(sigma=(sigma_low, sigma_high), ampl=(0.05, 0.05)) 
+                #rfi_timestream += t.getNonGaussianNonlocalized(Pflip=1.0) 
+            rfi_array[i,:] += rfi_timestream
+        ng = torch.from_numpy(rfi_array)
+        #ng = torch.stack([torch.from_numpy(t.getNonGaussianLocalized(sigma=(sigma_low, sigma_high))) for i in range(Ntrain+Ntest)])
+        
+        #g_trainloader = DataLoader(
+        #    torch.utils.data.TensorDataset(g_train_array),
+        #    batch_size=batch_size,
+        #    shuffle=True,
+        #    num_workers=self.nworkers,
+        #    pin_memory=True,
+        #    drop_last=True,
+        #)
 
-        ng_trainloader = DataLoader(
-            torch.utils.data.TensorDataset(ng_train_array),
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=self.nworkers,
-            pin_memory=True,
-            drop_last=True,
-        )
+        #ng_trainloader = DataLoader(
+        #    torch.utils.data.TensorDataset(ng_train_array),
+        #    batch_size=batch_size,
+        #    shuffle=True,
+        #    num_workers=self.nworkers,
+        #    pin_memory=True,
+        #    drop_last=True,
+        #)
         
         s_trainloader = DataLoader(
             torch.utils.data.TensorDataset(g_train_array + ng_train_array),
             batch_size=batch_size,
-            shuffle=True,
+            shuffle=False,
             num_workers=self.nworkers,
             pin_memory=True,
             drop_last=True,
@@ -178,7 +191,7 @@ class RFIDetect:
         for epoch in range(self.Nepochs):
             # iterate through the dataloaders
             #for i, (g, ng) in enumerate(zip(g_trainloader, ng_trainloader)): 
-            for i, s in enumerate(s_trainloader):
+            for i, s in enumerate(s_trainloader[i*1e5:(i+1)*1e5]):
                 # set to train mode
                 self.netE.train()
                 self.netD.train()
