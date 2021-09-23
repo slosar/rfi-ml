@@ -10,18 +10,34 @@ import matplotlib.pyplot as plt
 if not torch.cuda.is_available():
     print ("Warning: I see no CUDA, this will be slow!")
 
-class ToyGenerator:
-    def __init__(self, Np=1024, Pk=None):
+class RFIDetect_each_epoch:
+    def __init__(self, Np=1024, Ntrain=100000, Ntest=10, Pk=None, z_dim = 16, hidden_dim = 256, nworkers = 0, Nepochs = 3):
         self.Np = Np
         self.Nfft = self.Np // 2 + 1
+        self.Ntrain =  Ntrain
+        self.Ntest =  Ntest
         self.k = np.linspace(0, self.Nfft, self.Nfft)
         self.t = np.linspace(0, self.Np, self.Np)
+        self.z_dim = z_dim
+        self.hidden_dim = hidden_dim
+        self.nworkers = nworkers
+        self.Nepochs = Nepochs
 
         if Pk is None:
             self.Pk = (1 + np.exp(-(self.k - 256) ** 2 / (2 * 50 ** 2))) * np.exp(-self.k / 256)
             #self.Pk = (1 + np.exp(-(self.k - 0.5) ** 2 / (2 * 0.1 ** 2))) * np.exp(-self.k / 0.5)
         else:
             self.Pk = Pk
+                     
+        self.wrapper = 'example.ipynb'
+        self.code = 'rfi_ml.py'
+        self.save_folder = 'rfi_ml/'
+        os.makedirs(self.save_folder, exist_ok=True)
+        self.save_time = str(datetime.datetime.now()).split('.')[0].replace(' ','_').replace(':','-')
+        
+        
+        os.system('scp ./' + self.wrapper + ' ' + self.save_folder + '/' + self.save_time + '_' + self.wrapper)
+        os.system('scp ../' + self.code + ' ' + self.save_folder + '/' + self.save_time + '_' + self.code)
             
         #ax = plt.subplot(1,1,1)
         #plt.plot(self.k, self.Pk) #gaussian power spectrum
@@ -48,10 +64,11 @@ class ToyGenerator:
         #sigma = sigma[0]
         pos = np.random.uniform(3 * sigma, self.Np - 3 * sigma)
         ampl = np.random.uniform(*ampl)
+        t = np.linspace(0, self.Np, self.Np)
         rfi = (
             ampl
-            * np.cos(phase + freq * self.t)
-            * np.exp(-(self.t - pos) ** 2 / (2 * sigma ** 2))
+            * np.cos(phase + freq * t)
+            * np.exp(-(t - pos) ** 2 / (2 * sigma ** 2))
         )        
         return rfi
 
@@ -66,13 +83,11 @@ class ToyGenerator:
             flip = self.Np
         rfi = (ampl * np.cos(phase + freq * self.t) * np.where(self.t<flip, 1, -1))      
         return rfi
-    
-class RFIDetect:
 
     # Decoder nework
     class Decoder(nn.Module):
         def __init__(self, z_dim, hidden_dim, out_dim):
-            super(RFIDetect.Decoder, self).__init__()
+            super(RFIDetect_each_epoch.Decoder, self).__init__()
             self.main = nn.Sequential(
                 nn.Linear(z_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
@@ -88,7 +103,7 @@ class RFIDetect:
     # Encoder network
     class Encoder(nn.Module):
         def __init__(self, input_dim, hidden_dim, z_dim):
-            super(RFIDetect.Encoder, self).__init__()
+            super(RFIDetect_each_epoch.Encoder, self).__init__()
 
             self.main = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim * 2),
@@ -103,23 +118,6 @@ class RFIDetect:
             out = self.main(x)
             return out
 
-    def __init__(self, Np, z_dim = 16, hidden_dim = 256, nworkers = 0, Nepochs = 3):
-        self.Np = Np
-        self.z_dim = z_dim
-        self.hidden_dim = hidden_dim
-        self.nworkers = nworkers
-        self.Nepochs = Nepochs
-        
-        self.wrapper = 'example.ipynb'
-        self.code = 'rfi_ml.py'
-        self.save_folder = 'rfi_ml/'
-        os.makedirs(self.save_folder, exist_ok=True)
-        self.save_time = str(datetime.datetime.now()).split('.')[0].replace(' ','_').replace(':','-')
-        
-        
-        os.system('scp ./' + self.wrapper + ' ' + self.save_folder + '/' + self.save_time + '_' + self.wrapper)
-        os.system('scp ../' + self.code + ' ' + self.save_folder + '/' + self.save_time + '_' + self.code)
-
     def Gaussianize(self, signal):
         """ Gaussianizes a signal """
         fsig = np.fft.rfft(signal)
@@ -127,46 +125,7 @@ class RFIDetect:
         return np.fft.irfft((fsig * rot))
 
     #def train(self, g_train_array, ng_train_array, gauss_fact=torch.ones(1), lamb=1, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
-    def train(self, gauss_fact=torch.ones(1), lamb=1, batch_size = 32, lr=0.0002, betas=(0.5, 0.999), Ntrain=100000, Np=1024, Nrfi=1, sigma_low=20, sigma_high=50):
-        
-        g = torch.stack([torch.from_numpy(ToyGenerator.getGaussian(self)) for i in range(Ntrain)])
-        rfi_array = np.zeros((Ntrain, Np), dtype=float)
-        for i in range(Ntrain):
-            rfi_timestream = np.zeros(Np)
-            for j in range(Nrfi):
-                rfi_timestream += ToyGenerator.getNonGaussianLocalized(sigma=(sigma_low, sigma_high)) 
-                #rfi_timestream += t.getNonGaussianLocalized(sigma=(sigma_low, sigma_high), ampl=(0.05, 0.05)) 
-                #rfi_timestream += t.getNonGaussianNonlocalized(Pflip=1.0) 
-            rfi_array[i,:] += rfi_timestream
-        ng = torch.from_numpy(rfi_array)
-        #ng = torch.stack([torch.from_numpy(t.getNonGaussianLocalized(sigma=(sigma_low, sigma_high))) for i in range(Ntrain+Ntest)])
-        
-        #g_trainloader = DataLoader(
-        #    torch.utils.data.TensorDataset(g_train_array),
-        #    batch_size=batch_size,
-        #    shuffle=True,
-        #    num_workers=self.nworkers,
-        #    pin_memory=True,
-        #    drop_last=True,
-        #)
-
-        #ng_trainloader = DataLoader(
-        #    torch.utils.data.TensorDataset(ng_train_array),
-        #    batch_size=batch_size,
-        #    shuffle=True,
-        #    num_workers=self.nworkers,
-        #    pin_memory=True,
-        #    drop_last=True,
-        #)
-        
-        s_trainloader = DataLoader(
-            torch.utils.data.TensorDataset(g_train_array + ng_train_array),
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=self.nworkers,
-            pin_memory=True,
-            drop_last=True,
-        )
+    def train(self, gauss_fact=torch.ones(1), lamb=1, batch_size = 32, lr=0.0002, betas=(0.5, 0.999), Np=1024, Nrfi=1, sigma_low=20, sigma_high=50):
         
         if not hasattr(self,"netD"):
             self.netD = self.Decoder(
@@ -189,9 +148,28 @@ class RFIDetect:
         
         #Training loop
         for epoch in range(self.Nepochs):
+
+            g = torch.stack([torch.from_numpy(self.getGaussian()) for i in range(self.Ntrain)])
+            rfi_array = np.zeros((self.Ntrain, Np), dtype=float)
+            for i in range(self.Ntrain):
+                rfi_timestream = np.zeros(Np)
+                for j in range(Nrfi):
+                    rfi_timestream += self.getNonGaussianLocalized(sigma=(sigma_low, sigma_high)) 
+                rfi_array[i,:] += rfi_timestream
+            ng = torch.from_numpy(rfi_array)
+
+            s_trainloader = DataLoader(
+                torch.utils.data.TensorDataset(g + ng),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=self.nworkers,
+                pin_memory=True,
+                drop_last=True,
+            )
+
             # iterate through the dataloaders
             #for i, (g, ng) in enumerate(zip(g_trainloader, ng_trainloader)): 
-            for i, s in enumerate(s_trainloader[i*1e5:(i+1)*1e5]):
+            for i, s in enumerate(s_trainloader):
                 # set to train mode
                 self.netE.train()
                 self.netD.train()
@@ -227,11 +205,20 @@ class RFIDetect:
                 if iters % 100 == 0:
                     print(
                     "[%3d/%d][%3d/%d]\tLoss: %.10f"
-                    % (epoch, self.Nepochs, i, len(g_trainloader), loss.item())
+                    % (epoch, self.Nepochs, i, len(g), loss.item())
                     )
                 iters += 1
         
     def evaluate(self, g_test_array, ng_test_array, gauss_fact=torch.ones(1), lamb=1):
+        
+        #g_test_array = torch.stack([torch.from_numpy(self.getGaussian()) for i in range(self.Ntest)])
+        #rfi_array = np.zeros((self.Ntest, Np), dtype=float)
+        #for i in range(self.Ntest):
+        #    rfi_timestream = np.zeros(Np)
+        #    for j in range(Nrfi):
+        #        rfi_timestream += self.getNonGaussianLocalized(sigma=(sigma_low, sigma_high)) 
+        #    rfi_array[i,:] += rfi_timestream
+        #ng_test_array = torch.from_numpy(rfi_array)
             
         self.netE.eval()
         self.netD.eval()

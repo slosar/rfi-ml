@@ -61,10 +61,10 @@ class ToyGenerator:
         phase = np.random.uniform(0, 2 * np.pi)
         ampl = np.random.uniform(*ampl)
         if np.random.uniform(0, 1) < Pflip: #flip sign of cosine at random point in timestream, with given probability
-            flip = np.random.uniform(0, 1) 
+            flip = self.Np * np.random.uniform(0, 1) 
         else:
             flip = self.Np
-        rfi = (ampl * np.cos(phase + freq * self.t) * np.where(self.t<flip, 1, -1))      
+        rfi = (ampl * np.cos(phase + freq * self.t) * np.where(self.t<=flip, 1, -1))      
         return rfi
     
 class RFIDetect:
@@ -78,6 +78,18 @@ class RFIDetect:
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, hidden_dim * 2),
                 nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 2, hidden_dim * 4),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 4, hidden_dim * 8),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 8, hidden_dim * 16),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 16, hidden_dim * 32),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 32, hidden_dim * 64),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 64, hidden_dim * 128),
+                #nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim * 2, out_dim, bias=False),
             )
 
@@ -92,6 +104,18 @@ class RFIDetect:
 
             self.main = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim * 2),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 128, hidden_dim * 64),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 64, hidden_dim * 32),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 32, hidden_dim * 16),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 16, hidden_dim * 8),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 8, hidden_dim * 4),
+                #nn.LeakyReLU(0.02, inplace=False),
+                #nn.Linear(hidden_dim * 4, hidden_dim * 2),
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim * 2, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
@@ -127,7 +151,7 @@ class RFIDetect:
         return np.fft.irfft((fsig * rot))
 
     def train(self, g_train_array, ng_train_array, gauss_fact=torch.ones(1), lamb=1, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
-        
+            
         g_trainloader = DataLoader(
             torch.utils.data.TensorDataset(g_train_array),
             batch_size=batch_size,
@@ -171,6 +195,7 @@ class RFIDetect:
 
         #Training criterion
         recons_criterion = nn.MSELoss()
+        #recons_criterion = nn.L1Loss()
         
         iters = 0 
         
