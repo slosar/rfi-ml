@@ -316,7 +316,7 @@ class RFIDetect:
             ax.set_title("network input=Gauss(sig) + sig")
 
             ax = plt.subplot(2,3,6)
-            plt.plot(time, recons_out[test_int,:].cpu()) # output
+            plt.plot(time, recons_out[test_int,:].cpu().numpy()) # output
             ax.set_title("network output (~ng)")
 
             save_filename = self.save_time + '_epoch_' + str(self.Nepochs).zfill(7) + '_test_' + str(test_int) + '.png'
@@ -327,8 +327,8 @@ class RFIDetect:
             
             #Overplot
             plt.plot(sig[test_int,:])
-            plt.plot(ng_test_array[test_int])
-            plt.plot(recons_out[test_int,:].cpu())
+            plt.plot(ng_test_array[test_int].cpu().numpy())
+            plt.plot(recons_out[test_int,:].cpu().numpy())
             plt.legend(['Test In','RFI','Recovered'])
     
             save_filename = self.save_time + '_overplot_test_' + str(test_int) + '.png'
