@@ -131,3 +131,6 @@ dmypy.json
 
 #Plots and saved data subdirectories
 notebooks/rfi_ml
+
+#Raw data from BMX telescope
+bmxdata
