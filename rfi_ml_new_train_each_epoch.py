@@ -91,9 +91,11 @@ class RFIDetect_each_epoch:
             self.main = nn.Sequential(
                 nn.Linear(z_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim, hidden_dim * 2),
+                nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim * 2, out_dim, bias=False),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.LeakyReLU(0.02, inplace=False),
+                nn.Linear(hidden_dim, out_dim, bias=False),
             )
 
         def forward(self, x):
@@ -106,9 +108,11 @@ class RFIDetect_each_epoch:
             super(RFIDetect_each_epoch.Encoder, self).__init__()
 
             self.main = nn.Sequential(
-                nn.Linear(input_dim, hidden_dim * 2),
+                nn.Linear(input_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim * 2, hidden_dim),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.LeakyReLU(0.02, inplace=False),
+                nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Dropout(0.2),
                 nn.Linear(hidden_dim, z_dim),
