@@ -101,7 +101,7 @@ class ToyGenerator:
 class RFIDetect:
     
     # Decoder nework
-    class Decoder(nn.Module):
+    class Decoder(nn.Module):                                               #consider moving
         def __init__(self, z_dim, hidden_dim, hidden_dim_2, out_dim):
             super(RFIDetect.Decoder, self).__init__()
             self.main = nn.Sequential(
@@ -121,7 +121,7 @@ class RFIDetect:
             return out
         
     # Encoder network
-    class Encoder(nn.Module):                                               #consider putting encoder layer b4 decoder b/c it's weird that it's below it
+    class Encoder(nn.Module):                                               #consider moving
         def __init__(self, input_dim, hidden_dim, hidden_dim_2, z_dim):
             super(RFIDetect.Encoder, self).__init__()
 
@@ -142,7 +142,7 @@ class RFIDetect:
             out = self.main(x)
             return out
 
-    def __init__(self, Np, z_dim = 16, hidden_dim = 1024, hidden_dim_2 = 512, nworkers = 0, Nepochs = 30): #consider moving this to the top b/c it's weird that it's down here
+    def __init__(self, Np, z_dim = 16, hidden_dim = 1024, hidden_dim_2 = 512, nworkers = 0, Nepochs = 30): #consider moving up to top
         self.Np = Np
         self.z_dim = z_dim
         self.hidden_dim = hidden_dim
@@ -207,16 +207,16 @@ class RFIDetect:
                              
                 s = s[0].float().cuda() #moves to GPU
                 
-                gaussianized = torch.stack([gauss_fact * self.Gaussianize(sig.cpu()) for sig in s]).cuda().float() #unchecking
-                modsig = np.sqrt(1-lamb**2)*s + lamb*gaussianized #Normalization option #unchecking
+                #gaussianized = torch.stack([gauss_fact * self.Gaussianize(sig.cpu()) for sig in s]).cuda().float()
+                #modsig = np.sqrt(1-lamb**2)*s + lamb*gaussianized #Normalization option
                 
                 # encode-decode
                 #recons_out = self.netD(self.netE(s))
                 recons_out = self.netD(self.netE(modsig)) #Normalization option
                 
                 # loss
-                #loss = recons_criterion(s, recons_out)
-                loss = recons_criterion(modsig - recons_out, lamb*gaussianized) #Normalization option
+                loss = recons_criterion(s, recons_out)
+                #loss = recons_criterion(modsig - recons_out, lamb*gaussianized) #Normalization option
                 
                 # backpropagate and update the weights
                 optimizer.zero_grad()
@@ -231,12 +231,12 @@ class RFIDetect:
                     )
                 iters += 1
                  
-    def evaluate(self, g_test_array, ng_test_array, rfi_pwr, gauss_fact=torch.ones(1), lamb=0): #added z_dim
+    def evaluate(self, g_test_array, ng_test_array, rfi_pwr, gauss_fact=torch.ones(1), lamb=0):
             
         self.netE.eval()
         self.netD.eval()
 
-        #these could probably be for loops, idk if it would be useful tho since we're using very few layers... I guess for the architectures I'll be testing this summer, it might be nice... I won't have to worry about redefining things explicitly
+        #consider making a for loop for lines directly below
 
         self.netE.main[0].register_forward_hook(get_activation('layerE0')) 
         self.netE.main[2].register_forward_hook(get_activation('layerE2'))
