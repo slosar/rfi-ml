@@ -136,16 +136,6 @@ class RFIDetect:
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 16, hidden_dim * 32),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 32, hidden_dim * 64),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 64, hidden_dim * 128),
-                #nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, out_dim, bias=False),
             )
 
@@ -160,16 +150,6 @@ class RFIDetect:
 
             self.main = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 128, hidden_dim * 64),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 64, hidden_dim * 32),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 32, hidden_dim * 16),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
@@ -206,7 +186,7 @@ class RFIDetect:
         rot = np.exp(1j * np.random.uniform(0, 2 * np.pi, len(fsig)))
         return np.fft.irfft((fsig * rot))
 
-    def train(self, train_array, gauss_fact=torch.ones(1), lamb=1, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
+    def train(self, train_array, gauss_fact=torch.ones(1), lamb=0, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
         train_tensor = torch.from_numpy(train_array)
         s_trainloader = DataLoader(
             torch.utils.data.TensorDataset(train_tensor),
@@ -246,26 +226,12 @@ class RFIDetect:
                 self.netE.train()
                 self.netD.train()
                              
-                #g = g[0].float().cuda()
-                #ng = ng[0].float().cuda()
-                #s = g + ng
                 s = s[0].float().cuda()
                 
-                #sigs = g + ng
-                #gaussianized = torch.stack([gauss_fact * self.Gaussianize(sig.cpu()) for sig in sigs]).cuda().float()
-                #modsig = sigs + gaussianized
-                #modsig = np.sqrt(1-lamb**2)*sigs + lamb*gaussianized #Normalization option
-                #modsig = g + ng
-                
                 # encode-decode
-                #recons_out = self.netD(self.netE(modsig))
-                #recons_out = self.netD(self.netE(g + ng)) #Reducing number of variables to reduce memory load
                 recons_out = self.netD(self.netE(s))
                 
                 # loss
-                #loss = recons_criterion(modsig - recons_out, lamb*gaussianized) #Normalization option
-                #loss = recons_criterion(g + ng - recons_out, torch.zeros(recons_out.size()).float().cuda())
-                #loss = recons_criterion(g + ng, recons_out) #Reduced number of variables
                 loss = recons_criterion(s, recons_out)
                 
                 # backpropagate and update the weights
@@ -281,19 +247,15 @@ class RFIDetect:
                     )
                 iters += 1
         
-    def evaluate(self, test_array, gauss_fact=torch.ones(1), lamb=1):
+    def evaluate(self, test_array, gauss_fact=torch.ones(1), lamb=0):
             
         self.netE.eval()
         self.netD.eval()
         
         recons_out = []       
         with torch.no_grad():
-            #sigs = test_array.float().cuda()
-            #gaussianized = torch.stack([gauss_fact * torch.from_numpy(self.Gaussianize(sig.cpu().numpy())) for sig in sigs]).cuda().float()
-            #modsig = sigs + gaussianized
-            #modsig = np.sqrt(1-lamb**2)*sigs + lamb*gaussianized
-            modsig = torch.from_numpy(test_array).float().cuda()
-            recons_out = self.netD(self.netE(modsig))
+            sigs = torch.from_numpy(test_array).float().cuda()
+            recons_out = self.netD(self.netE(sigs))
           
         self.rms = np.std(modsig.cpu().numpy(), axis=1)
         self.avg_rms = np.mean(self.rms)

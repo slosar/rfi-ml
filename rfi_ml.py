@@ -80,7 +80,7 @@ class ToyGenerator:
         rfi = (
             ampl
             * np.cos(phase + freq * self.t)
-            * np.exp(-(self.t - pos) ** 2 / (2 * sigma ** 2))
+            * np.exp(-(self.t - pos) ** 2 / (2 * sigma ** 2)) 
         )    
         rfi_pwr = np.sum((rfi[round(pos-3*sigma):round(pos+3*sigma)])**2)/(6*sigma)
         return rfi, rfi_pwr
@@ -94,7 +94,7 @@ class ToyGenerator:
             flip = self.Np * np.random.uniform(0, 1) 
         else:
             flip = self.Np
-        rfi = (ampl * np.cos(phase + freq * self.t) * np.where(self.t<=flip, 1, -1))      
+        rfi = (ampl * np.cos(phase + freq * self.t) * np.where(self.t<=flip, 1, -1))  
         rfi_pwr = np.sum(rfi**2)/(self.Np)
         return rfi, rfi_pwr
     
@@ -105,74 +105,44 @@ class RFIDetect:
         def __init__(self, z_dim, hidden_dim, hidden_dim_2, out_dim):
             super(RFIDetect.Decoder, self).__init__()
             self.main = nn.Sequential(
-                nn.Linear(z_dim, hidden_dim),
+                nn.Linear(z_dim, hidden_dim_2),
+                nn.LeakyReLU(0.02, inplace=False),
+                nn.Linear(hidden_dim_2, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 16, hidden_dim * 32),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 32, hidden_dim * 64),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 64, hidden_dim * 128),
-                #nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, out_dim, bias=False),
             )
-        
-        #def getActivation(self, name):
-        #    self.decoder_activations = {}
-        #    def hook(model, input, output):
-        #        self.decoder_activations[name] = output.detach()
-        #    return hook
+
 
         def forward(self, x):
-            #self.main[0].register_forward_hook(RFIDetect.Decoder.getActivation(self, 'layer0'))
+            
             out = self.main(x)
             return out
         
     # Encoder network
-    class Encoder(nn.Module):     
+    class Encoder(nn.Module):                                               #consider putting encoder layer b4 decoder b/c it's weird that it's below it
         def __init__(self, input_dim, hidden_dim, hidden_dim_2, z_dim):
             super(RFIDetect.Encoder, self).__init__()
 
             self.main = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 128, hidden_dim * 64),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 64, hidden_dim * 32),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 32, hidden_dim * 16),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim, hidden_dim),
+                nn.Linear(hidden_dim, hidden_dim_2),
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Dropout(0.2),
-                nn.Linear(hidden_dim, z_dim),
+                nn.Linear(hidden_dim_2, z_dim),
             )
   
-        #def getActivation(self, name):
-        #    self.encoder_activations = {}
-        #    def hook(model, input, output):
-        #        self.encoder_activations[name] = output.detach()
-        #    return hook
             
         def forward(self, x):
-            #self.main[0].register_forward_hook(RFIDetect.Encoder.getActivation(self, 'layer0'))
+            
             out = self.main(x)
             return out
 
-    def __init__(self, Np, z_dim = 16, hidden_dim = 1024, hidden_dim_2 = 512, nworkers = 0, Nepochs = 30):
+    def __init__(self, Np, z_dim = 16, hidden_dim = 1024, hidden_dim_2 = 512, nworkers = 0, Nepochs = 30): #consider moving this to the top b/c it's weird that it's down here
         self.Np = Np
         self.z_dim = z_dim
         self.hidden_dim = hidden_dim
@@ -196,27 +166,9 @@ class RFIDetect:
         rot = np.exp(1j * np.random.uniform(0, 2 * np.pi, len(fsig)))
         return np.fft.irfft((fsig * rot))
 
-    def train(self, g_train_array, ng_train_array, gauss_fact=torch.ones(1), lamb=1, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
-            
-        #g_trainloader = DataLoader(
-        #    torch.utils.data.TensorDataset(g_train_array),
-        #    batch_size=batch_size,
-        #    shuffle=True,
-        #    num_workers=self.nworkers,
-        #    pin_memory=True,
-        #    drop_last=True,
-        #)
-
-        #ng_trainloader = DataLoader(
-        #    torch.utils.data.TensorDataset(ng_train_array),
-        #    batch_size=batch_size,
-        #    shuffle=True,
-        #    num_workers=self.nworkers,
-        #    pin_memory=True,
-        #    drop_last=True,
-        #)
+    def train(self, g_train_array, ng_train_array, gauss_fact=torch.ones(1), lamb=0, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
         
-        s_trainloader = DataLoader(
+        s_trainloader = DataLoader(                                            
             torch.utils.data.TensorDataset(g_train_array + ng_train_array),
             batch_size=batch_size,
             shuffle=True,
@@ -247,76 +199,64 @@ class RFIDetect:
         
         #Training loop
         for epoch in range(self.Nepochs):
-            # iterate through the dataloaders
-            #for i, (g, ng) in enumerate(zip(g_trainloader, ng_trainloader)): 
-            for i, s in enumerate(s_trainloader):
+            # iterate through the dataloaders 
+            for i, s in enumerate(s_trainloader): 
                 # set to train mode
                 self.netE.train()
                 self.netD.train()
                              
-                #g = g[0].float().cuda()
-                #ng = ng[0].float().cuda()
-                #s = g + ng
-                s = s[0].float().cuda()
+                s = s[0].float().cuda() #moves to GPU
                 
-                #sigs = g + ng
-                #gaussianized = torch.stack([gauss_fact * self.Gaussianize(sig.cpu()) for sig in sigs]).cuda().float()
-                #modsig = sigs + gaussianized
-                #modsig = np.sqrt(1-lamb**2)*sigs + lamb*gaussianized #Normalization option
-                #modsig = g + ng
+                gaussianized = torch.stack([gauss_fact * self.Gaussianize(sig.cpu()) for sig in s]).cuda().float() #unchecking
+                modsig = np.sqrt(1-lamb**2)*s + lamb*gaussianized #Normalization option #unchecking
                 
                 # encode-decode
-                #recons_out = self.netD(self.netE(modsig))
-                #recons_out = self.netD(self.netE(g + ng)) #Reducing number of variables to reduce memory load
-                recons_out = self.netD(self.netE(s))
+                #recons_out = self.netD(self.netE(s))
+                recons_out = self.netD(self.netE(modsig)) #Normalization option
                 
                 # loss
-                #loss = recons_criterion(modsig - recons_out, lamb*gaussianized) #Normalization option
-                #loss = recons_criterion(g + ng - recons_out, torch.zeros(recons_out.size()).float().cuda())
-                #loss = recons_criterion(g + ng, recons_out) #Reduced number of variables
-                loss = recons_criterion(s, recons_out)
+                #loss = recons_criterion(s, recons_out)
+                loss = recons_criterion(modsig - recons_out, lamb*gaussianized) #Normalization option
                 
                 # backpropagate and update the weights
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-                # print the training losses
-                if iters % 100 == 0:
+                # print the training losses  
+                if iters % 100 == 0: 
                     print(
                     "[%3d/%d][%3d/%d]\tLoss: %.10f"
                     % (epoch, self.Nepochs, i, len(s_trainloader), loss.item())
                     )
                 iters += 1
                  
-    def evaluate(self, g_test_array, ng_test_array, rfi_pwr, gauss_fact=torch.ones(1), lamb=1):
+    def evaluate(self, g_test_array, ng_test_array, rfi_pwr, gauss_fact=torch.ones(1), lamb=0): #added z_dim
             
         self.netE.eval()
         self.netD.eval()
 
-        self.netE.main[0].register_forward_hook(get_activation('layerE0'))
+        #these could probably be for loops, idk if it would be useful tho since we're using very few layers... I guess for the architectures I'll be testing this summer, it might be nice... I won't have to worry about redefining things explicitly
+
+        self.netE.main[0].register_forward_hook(get_activation('layerE0')) 
         self.netE.main[2].register_forward_hook(get_activation('layerE2'))
         self.netE.main[4].register_forward_hook(get_activation('layerE4'))
-        self.netE.main[7].register_forward_hook(get_activation('layerE7'))        
+        #self.netE.main[7].register_forward_hook(get_activation('layerE7'))        
         self.netD.main[0].register_forward_hook(get_activation('layerD0'))
         self.netD.main[2].register_forward_hook(get_activation('layerD2'))
         self.netD.main[4].register_forward_hook(get_activation('layerD4'))
-        self.netD.main[6].register_forward_hook(get_activation('layerD6'))
+        #self.netD.main[6].register_forward_hook(get_activation('layerD6'))
         
         recons_out = []       
-        with torch.no_grad():
+        with torch.no_grad(): #turning off gradient computation for NN evaluation
             sigs = g_test_array.float().cuda() + ng_test_array.float().cuda()
-            #gaussianized = torch.stack([gauss_fact * torch.from_numpy(self.Gaussianize(sig.cpu().numpy())) for sig in sigs]).cuda().float()
-            #modsig = sigs + gaussianized
-            #modsig = np.sqrt(1-lamb**2)*sigs + lamb*gaussianized
-            #modsig = sigs
-            recons_out = self.netD(self.netE(sigs))
-
-            #print(self.netD.main[0])
-            #for param in self.netD.main[0].parameters():
-            #      print(param.data)
-            #self.activation = activation
-            #print(self.activation)
+            
+            gaussianized = torch.stack([gauss_fact * torch.from_numpy(self.Gaussianize(sig.cpu().numpy())) for sig in sigs]).cuda().float() #Normalization option  component
+            modsig = np.sqrt(1-lamb**2)*sigs + lamb*gaussianized #Normalization option                 
+            
+            recons_out = self.netD(self.netE(modsig)) #Normalization option
+            #recons_out = self.netD(self.netE(sigs))
+            
                  
         self.rms = np.sqrt(np.sum((recons_out.cpu().numpy()-ng_test_array.cpu().numpy())**2, axis=1)/self.Np)
         self.avg_rms = np.sum(self.rms)/ng_test_array.cpu().numpy().shape[0]
@@ -341,6 +281,8 @@ class RFIDetect:
         #print('Nfft: ',self.Nfft)
         #print("sky pwr spec shape: ",self.sky_pwr_spec.shape)
         #print("recon pwr spec shape: ",self.recon_pwr_spec.shape)
+
+        #FIND A WAY TO SAVE ALL THE VALUES BELOW B/C IT DOESN'T SAVE
 
         print("Epochs: ",self.Nepochs)
         print("N tests: ", ng_test_array.cpu().numpy().shape[0])
@@ -595,7 +537,7 @@ class RFIDetect:
         #plt.yscale('log')
         #plt.legend(['True Sky Power Spectrum','Recovered Power Spectrum Residuals'])
         plt.title('Fractional Recovered Power Spectrum Residuals')
-        plt.ylabel('$(P_\mathrm{recov}-P_\mathrm{sky}) \ / \ P_\mathrm{sky}$')
+        #plt.ylabel('$(P_\mathrm{recov}-P_\mathrm{sky}) \ / \ P_\mathrm{sky}$') #checked
         plt.xlabel('Frequency Bin')
 
         save_filename = self.save_time + '_power_spectra_residuals_n_' + str(len(g_test_array)) + '.pdf'
