@@ -270,15 +270,13 @@ class RFIDetect:
         self.g_avg_rms = np.sum(self.g_rms)/g_test_array.cpu().numpy().shape[0]
         self.sn = (self.rfi_avg_rms/self.g_avg_rms)**2
         self.sn_2 = self.rfi_avg_pwr/(self.g_avg_rms)**2
+
         
         sig = (g_test_array.cpu() + ng_test_array.cpu()).numpy()
         self.Nfft = ng_test_array.cpu().numpy().shape[1] // 2 + 1
         self.sky_pwr_spec = (1/self.Nfft**2)*np.abs(np.fft.rfft(g_test_array))**2
         self.recon_pwr_spec = (1/self.Nfft**2)*np.abs(np.fft.rfft(sig-recons_out.cpu().numpy()))**2
         self.sig_pwr_spec = (1/self.Nfft**2)*np.abs(np.fft.rfft(sig))**2
-        #print('Nfft: ',self.Nfft)
-        #print("sky pwr spec shape: ",self.sky_pwr_spec.shape)
-        #print("recon pwr spec shape: ",self.recon_pwr_spec.shape)
 
         #FIND A WAY TO SAVE ALL THE VALUES BELOW B/C IT DOESN'T SAVE
 
@@ -318,123 +316,126 @@ class RFIDetect:
         self.pwr_spec_err = np.zeros([self.Nbins, len(g_test_array)])
         
         for test_int in range(len(g_test_array)):
-            gauss = self.Gaussianize(sig[test_int,:])
+
+            # Power of reconstructed output
+            recons_power = np.sum((recons_out.cpu().numpy())**2)                      # NEW NEW NEW
+
+            if recons_power > 500:
             
-            """ Standard Plots. Disabled for Ntest = 1000 run.
-            """
+                gauss = self.Gaussianize(sig[test_int,:])
+            
+                """ Standard Plots. Disabled for Ntest = 1000 run.
+                """
  
-            #Plot components separately
-            plt.figure(figsize=(17,10)) 
-            ax = plt.subplot(2,3,1)
-            plt.plot(time, ng_test_array[test_int].cpu().numpy()) # ng
-            ax.set_title("RFI Signal ($T_{ng}$)")
+                #Plot components separately
+                plt.figure(figsize=(17,10)) 
+                ax = plt.subplot(2,2,1)
+                plt.plot(time, ng_test_array[test_int].cpu().numpy()) # ng
+                ax.set_title("RFI Signal ($T_{ng}$)")
 
-            ax = plt.subplot(2,3,2)
-            plt.plot(time, g_test_array[test_int].cpu().numpy()) # g
-            ax.set_title("Gaussian Distributed Sky Signal ($T_g$)")
-
-            ax = plt.subplot(2,3,3)
-            plt.plot(time, sig[test_int,:]) # g + ng 
-            ax.set_title("Combined Signal (S)")
-
-            ax = plt.subplot(2,3,4)
-            plt.plot(time, gauss) # gaussianize(ng + g)
-            ax.set_title("Known Gaussian Signal ($T'_g$)")
-
-            ax = plt.subplot(2,3,5)
-            plt.plot(time, sig[test_int,:]+gauss) # input
-            ax.set_title("Network Input (S')")
-
-            ax = plt.subplot(2,3,6)
-            plt.plot(time, recons_out[test_int,:].cpu().numpy()) # output
-            plt.plot(ng_test_array[test_int].cpu().numpy()-recons_out[test_int,:].cpu().numpy()) #resid rfi
-            ax.set_title("Network Output (~$T_{ng}$)")
-            ax.legend(['Recovered RFI','Residual RFI'])
-
-            save_filename = self.save_time + '_epoch_' + str(self.Nepochs).zfill(7) + '_test_' + str(test_int) + '.pdf'
-            save_path = os.path.join(self.save_folder, save_filename)
-            print('Saving file...{}'.format(save_path))
-            plt.savefig(save_path, bbox_inches='tight')
-            plt.close()
-            
-            #Overplot
-            plt.plot(sig[test_int,:])
-            plt.plot(ng_test_array[test_int].cpu().numpy())
-            plt.plot(recons_out[test_int,:].cpu().numpy())
-            plt.legend(['Test In','RFI','Recovered'])
+                ax = plt.subplot(2,2,2)
+                plt.plot(time, g_test_array[test_int].cpu().numpy()) # g
+                ax.set_title("Gaussian Distributed Sky Signal ($T_g$)")
     
-            save_filename = self.save_time + '_overplot_test_' + str(test_int) + '.pdf'
-            save_path = os.path.join(self.save_folder, save_filename)
-            print('Saving file...{}'.format(save_path))
-            plt.savefig(save_path, bbox_inches='tight')
-            plt.close()
-            
-            #Residual RFI
-            plt.plot(ng_test_array[test_int].cpu().numpy())
-            plt.plot(ng_test_array[test_int].cpu().numpy()-recons_out[test_int,:].cpu().numpy())
-            plt.legend(['Input RFI','Residual RFI'])
+                ax = plt.subplot(2,2,3)
+                plt.plot(time, sig[test_int,:]) # g + ng 
+                ax.set_title("Combined Signal (S)")
     
-            save_filename = self.save_time + '_residual_rfi_test_' + str(test_int) + '.pdf'
-            save_path = os.path.join(self.save_folder, save_filename)
-            print('Saving file...{}'.format(save_path))
-            plt.savefig(save_path, bbox_inches='tight')
-            plt.close()            
-            
-            #RFI cleaned
-            plt.plot(g_test_array[test_int].cpu().numpy())
-            plt.plot(sig[test_int,:]-recons_out[test_int,:].cpu().numpy())
-            plt.legend(['True Sky Signal','RFI Subtracted Timestream'])
-            plt.title('RFI Cleaned Timestream')
-            plt.ylabel('Amplitude')
-            plt.xlabel('Sample')
+                ax = plt.subplot(2,2,4)
+                plt.plot(time, recons_out[test_int,:].cpu().numpy()) # output
+                plt.plot(ng_test_array[test_int].cpu().numpy()-recons_out[test_int,:].cpu().numpy()) #resid rfi
+                ax.set_title("Network Output (~$T_{ng}$)")
+                ax.legend(['Recovered RFI','Residual RFI'])
+    
+                save_filename = self.save_time + '_epoch_' + str(self.Nepochs).zfill(7) + '_test_' + str(test_int) + '.pdf'
+                save_path = os.path.join(self.save_folder, save_filename)
+                print('Saving file...{}'.format(save_path))
+                plt.savefig(save_path, bbox_inches='tight')
+                plt.close()
+                
+                #Overplot
+                plt.plot(sig[test_int,:])
+                plt.plot(ng_test_array[test_int].cpu().numpy())
+                plt.plot(recons_out[test_int,:].cpu().numpy())
+                plt.legend(['Test In','RFI','Recovered'])
+        
+                save_filename = self.save_time + '_overplot_test_' + str(test_int) + '.pdf'
+                save_path = os.path.join(self.save_folder, save_filename)
+                print('Saving file...{}'.format(save_path))
+                plt.savefig(save_path, bbox_inches='tight')
+                plt.close()
+                
+                #Residual RFI
+                plt.plot(ng_test_array[test_int].cpu().numpy())
+                plt.plot(ng_test_array[test_int].cpu().numpy()-recons_out[test_int,:].cpu().numpy())
+                plt.legend(['Input RFI','Residual RFI'])
+        
+                save_filename = self.save_time + '_residual_rfi_test_' + str(test_int) + '.pdf'
+                save_path = os.path.join(self.save_folder, save_filename)
+                print('Saving file...{}'.format(save_path))
+                plt.savefig(save_path, bbox_inches='tight')
+                plt.close()            
+                
+                #RFI cleaned
+                plt.plot(g_test_array[test_int].cpu().numpy())
+                plt.plot(sig[test_int,:]-recons_out[test_int,:].cpu().numpy())
+                plt.legend(['True Sky Signal','RFI Subtracted Timestream'])
+                plt.title('RFI Cleaned Timestream')
+                plt.ylabel('Amplitude')
+                plt.xlabel('Sample')
+    
+                save_filename = self.save_time + '_RFI_subtracted_test_' + str(test_int) + '.pdf'
+                save_path = os.path.join(self.save_folder, save_filename)
+                print('Saving file...{}'.format(save_path))
+                plt.savefig(save_path, bbox_inches='tight')
+                plt.close()
+                
+                #difference
+                diff = g_test_array[test_int].cpu().numpy() - (sig[test_int,:]-recons_out[test_int,:].cpu().numpy())
+                plt.plot(g_test_array[test_int].cpu().numpy())
+                plt.plot(diff)
+                plt.legend(['True - Recovered Timestream'])
+        
+                save_filename = self.save_time + '_diff_test_' + str(test_int) + '.png'
+                save_path = os.path.join(self.save_folder, save_filename)
+                print('Saving file...{}'.format(save_path))
+                plt.savefig(save_path, bbox_inches='tight')
+                plt.close()  
+                
+                #frac
+                frac = diff/g_test_array[test_int].cpu().numpy()
+                plt.semilogy(abs(frac))
+                plt.legend(['Fractional Error Timestream'])
+        
+                save_filename = self.save_time + '_frac_err_test_' + str(test_int) + '.png'
+                save_path = os.path.join(self.save_folder, save_filename)
+                print('Saving file...{}'.format(save_path))
+                plt.savefig(save_path, bbox_inches='tight')
+                plt.close()      
+                
+                from statistics import median
+                med_frac_diff[test_int] = median(frac)
+                print('Median Frac Diff: ', med_frac_diff[test_int])
+                
+                
+                #Power spectra comparison
+                self.freqs_per_bin = int((self.Nfft-1)/self.Nbins)
+                self.sky_spec_binned[:,test_int] = self.sky_pwr_spec[test_int,1:].reshape((self.Nbins,self.freqs_per_bin)).mean(axis=1)
+                self.recon_spec_binned[:,test_int] = self.recon_pwr_spec[test_int,1:].reshape((self.Nbins,self.freqs_per_bin)).mean(axis=1)
+                self.sig_spec_binned[:,test_int] = self.sig_pwr_spec[test_int,1:].reshape((self.Nbins,self.freqs_per_bin)).mean(axis=1)
+                self.pwr_spec_err[:,test_int] = self.recon_spec_binned[:,test_int]*np.sqrt(1/self.freqs_per_bin)*np.sqrt(1/2)
+                
+                chi_sqr[test_int] = ((self.sky_spec_binned[:,test_int] - self.recon_spec_binned[:,test_int])**2 / self.pwr_spec_err[:,test_int]**2).mean()
+                #print('Chi Squared: ', chi_sqr[test_int])
+                #print('DoF: ', self.Nbins-1)
+                from scipy.stats import chi2
+                #print('P Value: ', 1-chi2.cdf(chi_sqr[test_int],self.Nbins-1))
+                #print('1-P Value: ', chi2.cdf(chi_sqr[test_int],self.Nbins-1))
 
-            save_filename = self.save_time + '_RFI_subtracted_test_' + str(test_int) + '.pdf'
-            save_path = os.path.join(self.save_folder, save_filename)
-            print('Saving file...{}'.format(save_path))
-            plt.savefig(save_path, bbox_inches='tight')
-            plt.close()
-            
-            #difference
-            diff = g_test_array[test_int].cpu().numpy() - (sig[test_int,:]-recons_out[test_int,:].cpu().numpy())
-            plt.plot(g_test_array[test_int].cpu().numpy())
-            plt.plot(diff)
-            plt.legend(['True - Recovered Timestream'])
-    
-            save_filename = self.save_time + '_diff_test_' + str(test_int) + '.png'
-            save_path = os.path.join(self.save_folder, save_filename)
-            print('Saving file...{}'.format(save_path))
-            plt.savefig(save_path, bbox_inches='tight')
-            plt.close()  
-            
-            #frac
-            frac = diff/g_test_array[test_int].cpu().numpy()
-            plt.semilogy(abs(frac))
-            plt.legend(['Fractional Error Timestream'])
-    
-            save_filename = self.save_time + '_frac_err_test_' + str(test_int) + '.png'
-            save_path = os.path.join(self.save_folder, save_filename)
-            print('Saving file...{}'.format(save_path))
-            plt.savefig(save_path, bbox_inches='tight')
-            plt.close()      
-            
-            from statistics import median
-            med_frac_diff[test_int] = median(frac)
-            print('Median Frac Diff: ', med_frac_diff[test_int])
-            
-            
-            #Power spectra comparison
-            self.freqs_per_bin = int((self.Nfft-1)/self.Nbins)
-            self.sky_spec_binned[:,test_int] = self.sky_pwr_spec[test_int,1:].reshape((self.Nbins,self.freqs_per_bin)).mean(axis=1)
-            self.recon_spec_binned[:,test_int] = self.recon_pwr_spec[test_int,1:].reshape((self.Nbins,self.freqs_per_bin)).mean(axis=1)
-            self.sig_spec_binned[:,test_int] = self.sig_pwr_spec[test_int,1:].reshape((self.Nbins,self.freqs_per_bin)).mean(axis=1)
-            self.pwr_spec_err[:,test_int] = self.recon_spec_binned[:,test_int]*np.sqrt(1/self.freqs_per_bin)*np.sqrt(1/2)
-            
-            chi_sqr[test_int] = ((self.sky_spec_binned[:,test_int] - self.recon_spec_binned[:,test_int])**2 / self.pwr_spec_err[:,test_int]**2).mean()
-            #print('Chi Squared: ', chi_sqr[test_int])
-            #print('DoF: ', self.Nbins-1)
-            from scipy.stats import chi2
-            #print('P Value: ', 1-chi2.cdf(chi_sqr[test_int],self.Nbins-1))
-            #print('1-P Value: ', chi2.cdf(chi_sqr[test_int],self.Nbins-1))
+            else:
+                print("RFI not present")
+
+
     
             """
             plt.plot(range(self.Nbins), self.sky_spec_binned[:,test_int])
@@ -450,50 +451,6 @@ class RFIDetect:
             plt.close()    
             """
 
-            #Encoder layer plots   
-            #plt.figure(figsize=(29,10))
-            #ax = plt.subplot(2,5,1)
-            #plt.plot(sig[test_int,:])
-            #ax.set_title("Input") 
-
-            #ax = plt.subplot(2,5,2)
-            #plt.plot(activation['layerE0'][test_int,:].cpu().numpy())
-            #ax.set_title("Encoder Layer 1")
-            
-            #ax = plt.subplot(2,5,3)
-            #plt.plot(activation['layerE2'][test_int,:].cpu().numpy())
-            #ax.set_title("Encoder Layer 2")
-            
-            #ax = plt.subplot(2,5,4)
-            #plt.plot(activation['layerE4'][test_int,:].cpu().numpy())
-            #ax.set_title("Encoder Layer 3")
-            
-            #ax = plt.subplot(2,5,5)
-            #plt.plot(activation['layerE7'][test_int,:].cpu().numpy())
-            #ax.set_title("Encoder Layer 4")
-                     
-            #Decoder layer plots            
-            #ax = plt.subplot(2,5,6)
-            #plt.plot(activation['layerD0'][test_int,:].cpu().numpy())
-            #ax.set_title("Decoder Layer 1")
-            
-            #ax = plt.subplot(2,5,7)
-            #plt.plot(activation['layerD2'][test_int,:].cpu().numpy())
-            #ax.set_title("Decoder Layer 2")
-            
-            #ax = plt.subplot(2,5,8)
-            #plt.plot(activation['layerD4'][test_int,:].cpu().numpy())
-            #ax.set_title("Decoder Layer 3")
-            
-            #ax = plt.subplot(2,5,9)
-            #plt.plot(activation['layerD6'][test_int,:].cpu().numpy())
-            #ax.set_title("Output")
-            
-            #save_filename = self.save_time + '_epoch_' + str(self.Nepochs).zfill(7) + '_nn_layers_' + str(test_int) + '.png'
-            #save_path = os.path.join(self.save_folder, save_filename)
-            #print('Saving file...{}'.format(save_path))
-            #plt.savefig(save_path, bbox_inches='tight')
-            #plt.close()
         
         #Plot average sky, rfi contaminated, and recovered spectra 
         sky_spec_avg = self.sky_spec_binned.mean(axis=1)
