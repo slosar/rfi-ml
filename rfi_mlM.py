@@ -302,37 +302,80 @@ class RFIDetect:
         #    pickle.dump(self, file)
 
         return recons_out, activation
+
+    def indexing(self, recons_out, threshold=0.7):
     
-    def plot_eval(self, recons_out, g_test_array, ng_test_array, activation):
-        #Test diagnostics at end of epoch     
-        self.Nbins = 32
-        time = range(self.Np)
-        sig = (g_test_array.cpu() + ng_test_array.cpu()).numpy()
-        chi_sqr = np.zeros(len(g_test_array))
-        med_frac_diff = np.zeros(len(g_test_array))
-        self.sky_spec_binned = np.zeros([self.Nbins, len(g_test_array)])
-        self.recon_spec_binned = np.zeros([self.Nbins, len(g_test_array)])
-        self.sig_spec_binned = np.zeros([self.Nbins, len(g_test_array)])
-        self.pwr_spec_err = np.zeros([self.Nbins, len(g_test_array)])
+    
+        recons_contaminated = []
+        recons_clean = []
         
-        for test_int in range(len(g_test_array)):
+        for index, samples in enumerate(recons_out):
 
             # Power of reconstructed output
-            recons_power = np.sum((recons_out.cpu().numpy())**2)                      # NEW NEW NEW
 
-            if recons_power > 500:
+            recons_power = np.sum((samples.cpu().numpy())**2)                # NEW NEW NEW
             
+            if recons_power > threshold:
+                recons_contaminated.append(index)
+            else:
+                recons_clean.append(index)
+
+
+            # Define file names
+        save_contaminated = self.save_time + '_contaminated' + '_index' + '.txt'
+        save_clean = self.save_time + '_clean' + '_index' + '.txt'
+    
+        # Define file paths
+        save_path = os.path.join(self.save_folder, save_contaminated)
+        save_path1 = os.path.join(self.save_folder, save_clean)
+        
+        # Print file paths
+        print(f'Saving file... {save_path}')
+        print(f'Saving file... {save_path1}')
+        
+        # Check if the folder exists, create if it doesn't
+        if not os.path.exists(self.save_folder):
+            print(f'Folder {self.save_folder} does not exist. Creating it.')
+            os.makedirs(self.save_folder)
+        
+        # Save the contaminated indices to file
+        with open(save_path, 'w') as file:
+            for index in recons_contaminated:
+                file.write(f"{index}\n")
+                print(f'Writing contaminated index: {index}')  # Debug: Log each index written
+        
+        # Save the clean indices to file
+        with open(save_path1, 'w') as file:
+            for index in recons_clean:
+                file.write(f"{index}\n")
+                print(f'Writing clean index: {index}')  # Debug: Log each index written
+            
+        
+    
+    def plot_eval(self, recons_out, g_test_array, ng_test_array, activation):
+            #Test diagnostics at end of epoch     
+            self.Nbins = 32
+            time = range(self.Np)
+            sig = (g_test_array.cpu() + ng_test_array.cpu()).numpy()
+            chi_sqr = np.zeros(len(g_test_array))
+            med_frac_diff = np.zeros(len(g_test_array))
+            self.sky_spec_binned = np.zeros([self.Nbins, len(g_test_array)])
+            self.recon_spec_binned = np.zeros([self.Nbins, len(g_test_array)])
+            self.sig_spec_binned = np.zeros([self.Nbins, len(g_test_array)])
+            self.pwr_spec_err = np.zeros([self.Nbins, len(g_test_array)])
+            
+            for test_int in range(len(g_test_array)):
                 gauss = self.Gaussianize(sig[test_int,:])
-            
+                
                 """ Standard Plots. Disabled for Ntest = 1000 run.
                 """
- 
+     
                 #Plot components separately
                 plt.figure(figsize=(17,10)) 
                 ax = plt.subplot(2,2,1)
                 plt.plot(time, ng_test_array[test_int].cpu().numpy()) # ng
                 ax.set_title("RFI Signal ($T_{ng}$)")
-
+    
                 ax = plt.subplot(2,2,2)
                 plt.plot(time, g_test_array[test_int].cpu().numpy()) # g
                 ax.set_title("Gaussian Distributed Sky Signal ($T_g$)")
@@ -431,100 +474,94 @@ class RFIDetect:
                 from scipy.stats import chi2
                 #print('P Value: ', 1-chi2.cdf(chi_sqr[test_int],self.Nbins-1))
                 #print('1-P Value: ', chi2.cdf(chi_sqr[test_int],self.Nbins-1))
-
-            else:
-                print("RFI not present")
-
-
-    
-            """
-            plt.plot(range(self.Nbins), self.sky_spec_binned[:,test_int])
-            plt.errorbar(range(self.Nbins), self.recon_spec_binned[:,test_int], yerr=self.pwr_spec_err[:,test_int], fmt='o')
+        
+                """
+                plt.plot(range(self.Nbins), self.sky_spec_binned[:,test_int])
+                plt.errorbar(range(self.Nbins), self.recon_spec_binned[:,test_int], yerr=self.pwr_spec_err[:,test_int], fmt='o')
+                #plt.plot(range(self.Nbins), self.sky_pwr_spec[test_int,:])
+                #plt.errorbar(range(self.Nfft), self.recon_pwr_spec[test_int,:], yerr=pwr_spec_err, fmt='o')
+                plt.legend(['True Sky Power Spectrum','Recovered Sky Power Spectrum'])
+        
+                save_filename = self.save_time + '_power_spectra_test_' + str(test_int) + '.pdf'
+                save_path = os.path.join(self.save_folder, save_filename)
+                print('Saving file...{}'.format(save_path))
+                plt.savefig(save_path, bbox_inches='tight')
+                plt.close()    
+                """
+            
+            #Plot average sky, rfi contaminated, and recovered spectra 
+            sky_spec_avg = self.sky_spec_binned.mean(axis=1)
+            recon_spec_avg = self.recon_spec_binned.mean(axis=1)
+            sig_spec_avg = self.sig_spec_binned.mean(axis=1)
+            pwr_spec_err_avg = recon_spec_avg*np.sqrt(1/self.freqs_per_bin)*np.sqrt(1/len(g_test_array))*np.sqrt(1/2)
+            plt.plot(range(self.Nbins), sig_spec_avg, color='orange')
+            plt.plot(range(self.Nbins), sky_spec_avg, color='blue')
+            plt.errorbar(range(self.Nbins), recon_spec_avg, yerr=pwr_spec_err_avg, fmt='o', markersize=4, color='green')
+            plt.yscale('log')        
             #plt.plot(range(self.Nbins), self.sky_pwr_spec[test_int,:])
             #plt.errorbar(range(self.Nfft), self.recon_pwr_spec[test_int,:], yerr=pwr_spec_err, fmt='o')
-            plt.legend(['True Sky Power Spectrum','Recovered Sky Power Spectrum'])
-    
-            save_filename = self.save_time + '_power_spectra_test_' + str(test_int) + '.pdf'
+            plt.legend(['RFI Contaminated Power Spectrum','True Sky Power Spectrum','Recovered Sky Power Spectrum'])
+            plt.title('Average of ' + str(len(g_test_array)) + ' Recovered Power Spectra')
+            plt.ylabel('Power')
+            plt.xlabel('Frequency Bin')
+            
+            save_filename = self.save_time + '_power_spectra_test_avg_n_' + str(len(g_test_array)) + '.pdf'
             save_path = os.path.join(self.save_folder, save_filename)
             print('Saving file...{}'.format(save_path))
             plt.savefig(save_path, bbox_inches='tight')
-            plt.close()    
-            """
-
-        
-        #Plot average sky, rfi contaminated, and recovered spectra 
-        sky_spec_avg = self.sky_spec_binned.mean(axis=1)
-        recon_spec_avg = self.recon_spec_binned.mean(axis=1)
-        sig_spec_avg = self.sig_spec_binned.mean(axis=1)
-        pwr_spec_err_avg = recon_spec_avg*np.sqrt(1/self.freqs_per_bin)*np.sqrt(1/len(g_test_array))*np.sqrt(1/2)
-        plt.plot(range(self.Nbins), sig_spec_avg, color='orange')
-        plt.plot(range(self.Nbins), sky_spec_avg, color='blue')
-        plt.errorbar(range(self.Nbins), recon_spec_avg, yerr=pwr_spec_err_avg, fmt='o', markersize=4, color='green')
-        plt.yscale('log')        
-        #plt.plot(range(self.Nbins), self.sky_pwr_spec[test_int,:])
-        #plt.errorbar(range(self.Nfft), self.recon_pwr_spec[test_int,:], yerr=pwr_spec_err, fmt='o')
-        plt.legend(['RFI Contaminated Power Spectrum','True Sky Power Spectrum','Recovered Sky Power Spectrum'])
-        plt.title('Average of ' + str(len(g_test_array)) + ' Recovered Power Spectra')
-        plt.ylabel('Power')
-        plt.xlabel('Frequency Bin')
-        
-        save_filename = self.save_time + '_power_spectra_test_avg_n_' + str(len(g_test_array)) + '.pdf'
-        save_path = os.path.join(self.save_folder, save_filename)
-        print('Saving file...{}'.format(save_path))
-        plt.savefig(save_path, bbox_inches='tight')
-        plt.close()  
- 
-        #Plot with no RFI trace
-        plt.plot(range(int(self.Nbins)), sky_spec_avg[:int(self.Nbins)])
-        plt.errorbar(range(int(self.Nbins)), recon_spec_avg[:int(self.Nbins)], yerr=pwr_spec_err_avg[:int(self.Nbins)], fmt='o')
-        plt.yscale('log')
-        plt.legend(['True Sky Power Spectrum','Recovered Sky Power Spectrum'])
-
-        save_filename = self.save_time + '_power_spectra_test_avg_n_' + str(len(g_test_array)) + '_no_sig_trace.pdf'
-        save_path = os.path.join(self.save_folder, save_filename)
-        print('Saving file...{}'.format(save_path))
-        plt.savefig(save_path, bbox_inches='tight')
-        plt.close()  
-        
-        #Plot residuals
-        #plt.plot(range(int(self.Nbins)), sky_spec_avg*0)
-        plt.errorbar(range(int(self.Nbins)), (recon_spec_avg-sky_spec_avg)/sky_spec_avg, yerr=pwr_spec_err_avg/sky_spec_avg, fmt='o')
-        #plt.yscale('log')
-        #plt.legend(['True Sky Power Spectrum','Recovered Power Spectrum Residuals'])
-        plt.title('Fractional Recovered Power Spectrum Residuals')
-        #plt.ylabel('$(P_\mathrm{recov}-P_\mathrm{sky}) \ / \ P_\mathrm{sky}$') #checked
-        plt.xlabel('Frequency Bin')
-
-        save_filename = self.save_time + '_power_spectra_residuals_n_' + str(len(g_test_array)) + '.pdf'
-        save_path = os.path.join(self.save_folder, save_filename)
-        print('Saving file...{}'.format(save_path))
-        plt.savefig(save_path, bbox_inches='tight')
-        plt.close()  
-        
-        print('Mean Chi Squared: ', chi_sqr.mean())
-        print('Mean Chi Squared per Degree Freedom: ', chi_sqr.mean()/((self.Nbins-1))) 
-        print('P Value: ', 1-chi2.cdf(chi_sqr[test_int],(self.Nbins-1)))
-        print('1-P Value: ', chi2.cdf(chi_sqr[test_int],(self.Nbins-1)))
-        print('Mean Fractional Difference: ', med_frac_diff.mean())
+            plt.close()  
+     
+            #Plot with no RFI trace
+            plt.plot(range(int(self.Nbins)), sky_spec_avg[:int(self.Nbins)])
+            plt.errorbar(range(int(self.Nbins)), recon_spec_avg[:int(self.Nbins)], yerr=pwr_spec_err_avg[:int(self.Nbins)], fmt='o')
+            plt.yscale('log')
+            plt.legend(['True Sky Power Spectrum','Recovered Sky Power Spectrum'])
     
-        """
-        #S/N plot
-        sn = [0.25, 0.3, 0.4, 0.5, 1.0, 2.0]
-        false_neg_0 = [0.9, 0.79, 0.43, 0.08, 0.0, 0.0]
-        #false_neg_1 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        plt.plot(sn, false_neg_0)
-        #plt.plot(sn, false_neg_1)
-        plt.xlabel("Signal-to-Noise Ratio")
-        plt.ylabel("False Negative Rate")
-        #plt.legend(['Localized RFI','Long Period RFI'])
-    
-        save_filename = self.save_time + '_false_negative_rates.pdf'
-        save_path = os.path.join(self.save_folder, save_filename)
-        print('Saving file...{}'.format(save_path))
-        plt.savefig(save_path, bbox_inches='tight')
-        plt.close()
-        """
+            save_filename = self.save_time + '_power_spectra_test_avg_n_' + str(len(g_test_array)) + '_no_sig_trace.pdf'
+            save_path = os.path.join(self.save_folder, save_filename)
+            print('Saving file...{}'.format(save_path))
+            plt.savefig(save_path, bbox_inches='tight')
+            plt.close()  
             
-        #rand int seed check
-        #print('Numpy rand int check: ',np.random.uniform(0,1,1))
-        #print('Torch rand int check: ',torch.rand(1))
+            #Plot residuals
+            #plt.plot(range(int(self.Nbins)), sky_spec_avg*0)
+            plt.errorbar(range(int(self.Nbins)), (recon_spec_avg-sky_spec_avg)/sky_spec_avg, yerr=pwr_spec_err_avg/sky_spec_avg, fmt='o')
+            #plt.yscale('log')
+            #plt.legend(['True Sky Power Spectrum','Recovered Power Spectrum Residuals'])
+            plt.title('Fractional Recovered Power Spectrum Residuals')
+            #plt.ylabel('$(P_\mathrm{recov}-P_\mathrm{sky}) \ / \ P_\mathrm{sky}$') #checked
+            plt.xlabel('Frequency Bin')
+    
+            save_filename = self.save_time + '_power_spectra_residuals_n_' + str(len(g_test_array)) + '.pdf'
+            save_path = os.path.join(self.save_folder, save_filename)
+            print('Saving file...{}'.format(save_path))
+            plt.savefig(save_path, bbox_inches='tight')
+            plt.close()  
+            
+            print('Mean Chi Squared: ', chi_sqr.mean())
+            print('Mean Chi Squared per Degree Freedom: ', chi_sqr.mean()/((self.Nbins-1))) 
+            print('P Value: ', 1-chi2.cdf(chi_sqr[test_int],(self.Nbins-1)))
+            print('1-P Value: ', chi2.cdf(chi_sqr[test_int],(self.Nbins-1)))
+            print('Mean Fractional Difference: ', med_frac_diff.mean())
+        
+            """
+            #S/N plot
+            sn = [0.25, 0.3, 0.4, 0.5, 1.0, 2.0]
+            false_neg_0 = [0.9, 0.79, 0.43, 0.08, 0.0, 0.0]
+            #false_neg_1 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            plt.plot(sn, false_neg_0)
+            #plt.plot(sn, false_neg_1)
+            plt.xlabel("Signal-to-Noise Ratio")
+            plt.ylabel("False Negative Rate")
+            #plt.legend(['Localized RFI','Long Period RFI'])
+        
+            save_filename = self.save_time + '_false_negative_rates.pdf'
+            save_path = os.path.join(self.save_folder, save_filename)
+            print('Saving file...{}'.format(save_path))
+            plt.savefig(save_path, bbox_inches='tight')
+            plt.close()
+            """
+                
+            #rand int seed check
+            #print('Numpy rand int check: ',np.random.uniform(0,1,1))
+            #print('Torch rand int check: ',torch.rand(1))
