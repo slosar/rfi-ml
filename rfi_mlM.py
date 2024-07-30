@@ -151,7 +151,7 @@ class RFIDetect:
         self.Nepochs = Nepochs
         
         self.wrapper = 'example.ipynb'
-        self.code = 'rfi_ml.py'
+        self.code = 'rfi_mlM.py'
         self.save_folder = 'rfi_ml/'
         os.makedirs(self.save_folder, exist_ok=True)
         self.save_time = str(datetime.datetime.now()).split('.')[0].replace(' ','_').replace(':','-')
@@ -332,6 +332,11 @@ class RFIDetect:
         # Print file paths
         print(f'Saving file... {save_path}')
         print(f'Saving file... {save_path1}')
+
+        # Print the number of clean samples
+        print('number of clean samples:', len(recons_clean))
+        print('number of contaminated samples:', len(recons_contaminated))
+        print('false positive rate:', len(recons_clean) / len(recons_out))
         
         # Check if the folder exists, create if it doesn't
         if not os.path.exists(self.save_folder):
