@@ -11,7 +11,7 @@ if not torch.cuda.is_available():
     print ("Warning: I see no CUDA, this will be slow!")
     
 class S4Loader:
-    def __init__(self, Np=1024, freq='0000'):
+    def __init__(self, Np=1024, freq='f150'):
         self.Np = Np
         self.freq = freq
         
@@ -47,7 +47,7 @@ class S4Loader:
         print('Train data mean: ',np.mean(train_data))
         print('Eval data mean: ',np.mean(eval_data))
         
-        #Normalize RMS to RMS of first timestream                          Why?
+        #Normalize RMS to RMS of first timestream                         
         rms_norm = np.std(train_data[0])
         print("RMS normalization factor: ",rms_norm)
         #Or normalize to RMS ~0.0175, approximate value from test version?
@@ -63,10 +63,12 @@ class S4Loader:
             
     
 class RFIDetect:
-    def __init__(self, Np, z_dim = 16, hidden_dim = 1024, nworkers = 0, Nepochs = 30):
+    def __init__(self, Np, z_dim = 16, hidden_dim = 1024, hidden_dim_2=2048, nworkers = 0, Nepochs = 30, dropout=0.2):
         self.Np = Np
         self.z_dim = z_dim
         self.hidden_dim = hidden_dim
+        self.hidden_dim_2 = hidden_dim_2
+        self.dropout = dropout
         self.nworkers = nworkers           #what are these? nworkers?
         self.Nepochs = Nepochs
         
@@ -82,18 +84,18 @@ class RFIDetect:
 
         # Encoder network
     class Encoder(nn.Module):
-        def __init__(self, input_dim, hidden_dim, z_dim):
+        def __init__(self, input_dim, hidden_dim, hidden_dim_2, z_dim, dropout):
             super(RFIDetect.Encoder, self).__init__()
 
             self.main = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim, hidden_dim),
+                nn.Linear(hidden_dim, hidden_dim_2),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim, hidden_dim),
+                nn.Linear(hidden_dim_2, hidden_dim_2),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Dropout(0.2),
-                nn.Linear(hidden_dim, z_dim),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim_2, z_dim),
             )
 
         def forward(self, x):
@@ -102,14 +104,14 @@ class RFIDetect:
     
     # Decoder nework
     class Decoder(nn.Module):
-        def __init__(self, z_dim, hidden_dim, out_dim):
+        def __init__(self, z_dim, hidden_dim, hidden_dim_2, out_dim):
             super(RFIDetect.Decoder, self).__init__()
             self.main = nn.Sequential(
-                nn.Linear(z_dim, hidden_dim),
+                nn.Linear(z_dim, hidden_dim_2),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim, hidden_dim),
+                nn.Linear(hidden_dim_2, hidden_dim_2),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim, hidden_dim),
+                nn.Linear(hidden_dim_2, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, out_dim, bias=False),
             )
@@ -133,11 +135,11 @@ class RFIDetect:
         
         if not hasattr(self,"netD"):
             self.netD = self.Decoder(
-                z_dim=self.z_dim, hidden_dim=self.hidden_dim, out_dim=self.Np
+                z_dim=self.z_dim, hidden_dim=self.hidden_dim, hidden_dim_2=self.hidden_dim_2, out_dim=self.Np
             ).cuda()
             self.netE = self.Encoder(
-                input_dim=self.Np, hidden_dim=self.hidden_dim, z_dim=self.z_dim
-            ).cuda()
+                input_dim=self.Np, hidden_dim=self.hidden_dim, hidden_dim_2=self.hidden_dim_2, z_dim=self.z_dim,
+            dropout=self.dropout).cuda()
             
         optimizer = optim.Adam(
             [{"params": self.netE.parameters()}, {"params": self.netD.parameters()}],
@@ -212,7 +214,6 @@ class RFIDetect:
         time = range(self.Np)
 
         for test_int in range(len(test_array)):
-
             
             """
             Plots that compare raw signal to cleaned signal
@@ -230,13 +231,14 @@ class RFIDetect:
 
             #RFI cleaned
             ax = fig1.add_subplot(1,2,2)
-            plt.plot(test_array[test_int].cpu().numpy(), color='steelblue')
-            plt.plot(sig[test_int,:]-recons_out[test_int,:].cpu().numpy(), color='forestgreen')
+            plt.plot(test_array[test_int], color='steelblue')
+            plt.plot(test_array[test_int,:]-recons_out[test_int,:].cpu().numpy(), color='forestgreen')
+            #plt.plot(test_array[test_int,:]-recons_out[test_int,:].cpu().numpy(), color='forestgreen')
             plt.ylabel('Amplitude', fontsize=11)
             plt.xlabel('Sample Length', fontsize=11)
             ax.legend(['Input Signal','RFI Subtracted Timestream'])
 
-            save_filename = self.save_time + 'contrast' + '_test_' + str(test_int) + '.png'
+            save_filename = self.save_time + '_contrast' + '_test_' + str(test_int) + '.png'
             save_path = os.path.join(self.save_folder, save_filename)
             print('Saving file...{}'.format(save_path))
             plt.savefig(save_path, bbox_inches='tight')
