@@ -9,6 +9,13 @@ import matplotlib.pyplot as plt
 
 if not torch.cuda.is_available():
     print ("Warning: I see no CUDA, this will be slow!")
+
+#Get output of NN at intermediate steps
+activation = {}
+def get_activation(name):
+    def hook(model, input, output):
+        activation[name] = output.detach()
+    return hook    
     
 class S4Loader:
     def __init__(self, Np=1024, freq='f150'):
@@ -24,7 +31,7 @@ class S4Loader:
             n_timestreams = np.size(data_0, 0)
             data_array = np.zeros((len(data_files)*n_timestreams, self.Np))
             for i, file in enumerate(data_files):
-                data_file = np.load(file)
+                data_file = np.load(file)       
                 for j in range(n_timestreams):
                     data_array[i*n_timestreams+j,:] += data_file[j]
         else:
@@ -63,12 +70,11 @@ class S4Loader:
             
     
 class RFIDetect:
-    def __init__(self, Np, z_dim = 16, hidden_dim = 1024, hidden_dim_2=2048, nworkers = 0, Nepochs = 30, dropout=0.2):
+    def __init__(self, Np, z_dim = 16, hidden_dim = 1024, hidden_dim_2=2048, nworkers = 0, Nepochs = 30):
         self.Np = Np
         self.z_dim = z_dim
         self.hidden_dim = hidden_dim
         self.hidden_dim_2 = hidden_dim_2
-        self.dropout = dropout
         self.nworkers = nworkers           #what are these? nworkers?
         self.Nepochs = Nepochs
         
@@ -82,47 +88,51 @@ class RFIDetect:
         os.system('scp ./' + self.wrapper + ' ' + self.save_folder + '/' + self.save_time + '_' + self.wrapper)
         os.system('scp ../' + self.code + ' ' + self.save_folder + '/' + self.save_time + '_' + self.code)
 
-        # Encoder network
-    class Encoder(nn.Module):
-        def __init__(self, input_dim, hidden_dim, hidden_dim_2, z_dim, dropout):
-            super(RFIDetect.Encoder, self).__init__()
-
-            self.main = nn.Sequential(
-                nn.Linear(input_dim, hidden_dim),
-                nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim, hidden_dim_2),
-                nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim_2, hidden_dim_2),
-                nn.LeakyReLU(0.02, inplace=False),
-                nn.Dropout(dropout),
-                nn.Linear(hidden_dim_2, z_dim),
-            )
-
-        def forward(self, x):
-            out = self.main(x)
-            return out
-    
     # Decoder nework
-    class Decoder(nn.Module):
+    class Decoder(nn.Module):                                          
         def __init__(self, z_dim, hidden_dim, hidden_dim_2, out_dim):
             super(RFIDetect.Decoder, self).__init__()
             self.main = nn.Sequential(
                 nn.Linear(z_dim, hidden_dim_2),
                 nn.LeakyReLU(0.02, inplace=False),
-                nn.Linear(hidden_dim_2, hidden_dim_2),
-                nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim_2, hidden_dim),
+                nn.LeakyReLU(0.02, inplace=False),
+                nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, out_dim, bias=False),
             )
 
+
         def forward(self, x):
+            
+            out = self.main(x)
+            return out
+        
+    # Encoder network
+    class Encoder(nn.Module):                                              
+        def __init__(self, input_dim, hidden_dim, hidden_dim_2, z_dim):
+            super(RFIDetect.Encoder, self).__init__()
+
+            self.main = nn.Sequential(
+                nn.Linear(input_dim, hidden_dim),
+                nn.LeakyReLU(0.02, inplace=False),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.LeakyReLU(0.02, inplace=False),
+                nn.Linear(hidden_dim, hidden_dim_2),
+                nn.LeakyReLU(0.02, inplace=False),
+                nn.Dropout(0.2),
+                nn.Linear(hidden_dim_2, z_dim),
+            )
+  
+            
+        def forward(self, x):
+            
             out = self.main(x)
             return out
 
 
 
-    def train(self, train_array, gauss_fact=torch.ones(1), batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
+    def train(self, train_array, gauss_fact=torch.ones(1), lamb=0, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
         train_tensor = torch.from_numpy(train_array)
         s_trainloader = DataLoader(
             torch.utils.data.TensorDataset(train_tensor),
@@ -138,8 +148,7 @@ class RFIDetect:
                 z_dim=self.z_dim, hidden_dim=self.hidden_dim, hidden_dim_2=self.hidden_dim_2, out_dim=self.Np
             ).cuda()
             self.netE = self.Encoder(
-                input_dim=self.Np, hidden_dim=self.hidden_dim, hidden_dim_2=self.hidden_dim_2, z_dim=self.z_dim,
-            dropout=self.dropout).cuda()
+                input_dim=self.Np, hidden_dim=self.hidden_dim, hidden_dim_2=self.hidden_dim_2, z_dim=self.z_dim).cuda()
             
         optimizer = optim.Adam(
             [{"params": self.netE.parameters()}, {"params": self.netD.parameters()}],
