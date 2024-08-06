@@ -120,7 +120,7 @@ class RFIDetect:
         os.system('scp ../' + self.code + ' ' + self.save_folder + '/' + self.save_time + '_' + self.code)
 
 
-    def train(self, train_array, gauss_fact=torch.ones(1), lamb=0, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
+    def train(self, train_array, gauss_fact=torch.ones(1), lamb=0, batch_size = 4, lr=0.0002, betas=(0.5, 0.999)): #reduced batch size to 4
         train_tensor = torch.from_numpy(train_array)
         s_trainloader = DataLoader(
             torch.utils.data.TensorDataset(train_tensor),
