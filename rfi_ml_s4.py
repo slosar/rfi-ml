@@ -58,7 +58,7 @@ class S4Loader:
                 rms = np.sqrt(np.sum((TOD[i])**2)/self.Np)
                 TOD[i] *= (rms_norm/rms)
                 
-            return norm_TOD
+            return TOD
 
 class RFIDetect:
 
@@ -100,10 +100,11 @@ class RFIDetect:
             out = self.main(x)
             return out
         
-    def __init__(self, Np=1024, z_dim = 16, hidden_dim = 256, nworkers = 0, Nepochs = 25):
+    def __init__(self, Np=1024, z_dim = 16, hidden_dim = 1024, hidden_dim_2 = 1024, nworkers = 0, Nepochs = 25):
         self.Np = Np
         self.z_dim = z_dim
         self.hidden_dim = hidden_dim
+        self.hidden_dim_2 = hidden_dim_2
         self.nworkers = nworkers
         self.Nepochs = Nepochs
         
