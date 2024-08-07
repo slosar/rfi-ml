@@ -45,7 +45,7 @@ class S4Loader:
         return total_TOD
 
 
-    def normalizeData(self, TOD):
+    def normalizeData(self, TOD): # EDIT take mean of each chunk and subtract off, might not need it
             #Normalize mean to zero
             TOD -= np.mean(TOD)
             print('Train data mean: ',np.mean(TOD))
@@ -120,7 +120,7 @@ class RFIDetect:
 
 
     def train(self, train_array, gauss_fact=torch.ones(1), lamb=0, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
-        train_tensor = torch.from_numpy(train_array)
+        train_tensor = torch.from_numpy(train_array) # EDIT add .float.cuda()?
         s_trainloader = DataLoader(
             torch.utils.data.TensorDataset(train_tensor),
             batch_size=batch_size,
@@ -184,7 +184,7 @@ class RFIDetect:
         self.netE.eval()
         self.netD.eval()
         
-        recons_out = []       
+        recons_out = []      # EDIT what exactly is recons_out object? A dictionary, why not make it an array like test_array? 
         with torch.no_grad():
             sigs = torch.from_numpy(test_array).float().cuda()
             recons_out = self.netD(self.netE(sigs))
@@ -218,7 +218,9 @@ class RFIDetect:
             ax = fig.add_subplot(1,1,1)
             ax.plot(test_array[test_int,:])
             #ax.plot(recons_out[test_int,:].cpu().numpy()) # something is wrong here, checking
-            ax.plot(recons_out[test_int,:].cpu().numpy())
+            ax.plot(recons_out[test_int,:].cpu().numpy()) # print out recons_out shape, print out recons_out[0,:] - recons_out[1,:] and if it gives back zero, they're the same
+
+            # if they're identical, the NN isn't training
             ax.legend(['Timestream In','RFI Recovered'])
     
             save_filename = self.save_time + '_overplot_test_' + str(test_int) + '.png'
@@ -231,40 +233,3 @@ class RFIDetect:
 
 
 
-
-
-            """
-
-            I will use these plots later, there's a bug, I just need results and I'm busy writing a paper, so I'm using the BMX plotting code
-            
-            """
-            #Plots that compare raw signal to cleaned signal
-            """
-            
-            fig1 = plt.figure(figsize=(20,10))
-            
-            #Overplot
-            ax = fig1.add_subplot(1,2,1)
-            plt.plot(test_array[sample], color='steelblue')
-            plt.plot(recons_out[sample].cpu().numpy(), color='orangered')
-            plt.xlabel('Something', fontsize=11)
-            plt.ylabel('Something else', fontsize=11)
-            ax.legend(['Timestream In','RFI Recovered'])
-
-            #RFI cleaned
-            ax = fig1.add_subplot(1,2,2)
-            plt.plot(test_array[sample], color='steelblue')
-            plt.plot(test_array[sample]-recons_out[sample].cpu().numpy(), color='forestgreen')
-            plt.ylabel('Amplitude', fontsize=11)
-            plt.xlabel('Sample Length', fontsize=11)
-            ax.legend(['Input Signal','RFI Subtracted Timestream'])
-
-            save_filename = self.save_time + '_contrast' + '_test_' + str(test_int) + '.png'
-            save_path = os.path.join(self.save_folder, save_filename)
-            print('Saving file...{}'.format(save_path))
-            plt.savefig(save_path, bbox_inches='tight')
-            
-            fig1.clf #clears the entire current figure with all its axes, but leaves the window opened, such that it may be reused for other plots.
-            plt.close(fig1)
-
-            """
