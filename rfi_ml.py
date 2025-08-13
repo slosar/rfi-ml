@@ -17,7 +17,8 @@ def get_activation(name):
     def hook(model, input, output):
         activation[name] = output.detach()
     return hook    
-    
+   
+#Load BMX data   
 class BMXLoader:
     def __init__(self, Np=2048, freq='0000'):
         self.Np = Np
@@ -37,6 +38,7 @@ class BMXLoader:
             
         return data_array      
 
+#Generate test RFI signal
 class ToyGenerator:
     def __init__(self, Np=1024, Pk=None):
         self.Np = Np
@@ -46,7 +48,6 @@ class ToyGenerator:
 
         if Pk is None:
             self.Pk = (1 + np.exp(-(self.k - 256) ** 2 / (2 * 50 ** 2))) * np.exp(-self.k / 256)
-            #self.Pk = (1 + np.exp(-(self.k - 0.5) ** 2 / (2 * 0.1 ** 2))) * np.exp(-self.k / 0.5)
         else:
             self.Pk = Pk
             
@@ -60,12 +61,6 @@ class ToyGenerator:
         xf *= self.Pk        
         xf /= 4.0*np.sum(np.abs(xf**2)) #Normalize for varying timestream length
         
-        #print("Avg Pk: ", np.mean(self.Pk))
-        #print("Avg xf: ", np.abs(np.mean(xf)))
-        #print("Avg irfft(xf): ", np.abs(np.mean(np.fft.irfft(xf, norm="forward"))))
-        #print("Avg2 irfft(xf): ", np.abs(np.mean(np.fft.irfft(xf)*self.Np)))
-        
-        #return np.fft.irfft(xf, norm="forward") #Forward keywork for fft normalization prevents divide by 1/Nfft on irfft
         return np.fft.irfft(xf)*self.Np #Manual canceling of the normalization for backwards compatibility with numpy <v1.20
 
     def getNonGaussianLocalized(self, freq=(0.2, 0.5), sigma=(20, 50), ampl=(0.1, 0.2)):
@@ -74,7 +69,6 @@ class ToyGenerator:
         freq = np.random.uniform(*freq)
         phase = np.random.uniform(0, 2 * np.pi)
         sigma = np.random.uniform(*sigma)
-        #sigma = sigma[0]
         pos = np.random.uniform(3 * sigma, self.Np - 3 * sigma)
         ampl = np.random.uniform(*ampl)
         rfi = (
@@ -111,16 +105,6 @@ class RFIDetect:
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 16, hidden_dim * 32),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 32, hidden_dim * 64),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 64, hidden_dim * 128),
-                #nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, out_dim, bias=False),
             )
         
@@ -142,16 +126,6 @@ class RFIDetect:
 
             self.main = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 128, hidden_dim * 64),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 64, hidden_dim * 32),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 32, hidden_dim * 16),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
@@ -197,24 +171,6 @@ class RFIDetect:
         return np.fft.irfft((fsig * rot))
 
     def train(self, g_train_array, ng_train_array, gauss_fact=torch.ones(1), lamb=1, batch_size = 32, lr=0.0002, betas=(0.5, 0.999)):
-            
-        #g_trainloader = DataLoader(
-        #    torch.utils.data.TensorDataset(g_train_array),
-        #    batch_size=batch_size,
-        #    shuffle=True,
-        #    num_workers=self.nworkers,
-        #    pin_memory=True,
-        #    drop_last=True,
-        #)
-
-        #ng_trainloader = DataLoader(
-        #    torch.utils.data.TensorDataset(ng_train_array),
-        #    batch_size=batch_size,
-        #    shuffle=True,
-        #    num_workers=self.nworkers,
-        #    pin_memory=True,
-        #    drop_last=True,
-        #)
         
         s_trainloader = DataLoader(
             torch.utils.data.TensorDataset(g_train_array + ng_train_array),
@@ -241,39 +197,23 @@ class RFIDetect:
 
         #Training criterion
         recons_criterion = nn.MSELoss()
-        #recons_criterion = nn.L1Loss()
         
         iters = 0 
         
         #Training loop
         for epoch in range(self.Nepochs):
             # iterate through the dataloaders
-            #for i, (g, ng) in enumerate(zip(g_trainloader, ng_trainloader)): 
             for i, s in enumerate(s_trainloader):
                 # set to train mode
                 self.netE.train()
                 self.netD.train()
                              
-                #g = g[0].float().cuda()
-                #ng = ng[0].float().cuda()
-                #s = g + ng
                 s = s[0].float().cuda()
                 
-                #sigs = g + ng
-                #gaussianized = torch.stack([gauss_fact * self.Gaussianize(sig.cpu()) for sig in sigs]).cuda().float()
-                #modsig = sigs + gaussianized
-                #modsig = np.sqrt(1-lamb**2)*sigs + lamb*gaussianized #Normalization option
-                #modsig = g + ng
-                
                 # encode-decode
-                #recons_out = self.netD(self.netE(modsig))
-                #recons_out = self.netD(self.netE(g + ng)) #Reducing number of variables to reduce memory load
                 recons_out = self.netD(self.netE(s))
                 
                 # loss
-                #loss = recons_criterion(modsig - recons_out, lamb*gaussianized) #Normalization option
-                #loss = recons_criterion(g + ng - recons_out, torch.zeros(recons_out.size()).float().cuda())
-                #loss = recons_criterion(g + ng, recons_out) #Reduced number of variables
                 loss = recons_criterion(s, recons_out)
                 
                 # backpropagate and update the weights
@@ -306,17 +246,7 @@ class RFIDetect:
         recons_out = []       
         with torch.no_grad():
             sigs = g_test_array.float().cuda() + ng_test_array.float().cuda()
-            #gaussianized = torch.stack([gauss_fact * torch.from_numpy(self.Gaussianize(sig.cpu().numpy())) for sig in sigs]).cuda().float()
-            #modsig = sigs + gaussianized
-            #modsig = np.sqrt(1-lamb**2)*sigs + lamb*gaussianized
-            #modsig = sigs
             recons_out = self.netD(self.netE(sigs))
-
-            #print(self.netD.main[0])
-            #for param in self.netD.main[0].parameters():
-            #      print(param.data)
-            #self.activation = activation
-            #print(self.activation)
                  
         self.rms = np.sqrt(np.sum((recons_out.cpu().numpy()-ng_test_array.cpu().numpy())**2, axis=1)/self.Np)
         self.avg_rms = np.sum(self.rms)/ng_test_array.cpu().numpy().shape[0]
@@ -338,9 +268,6 @@ class RFIDetect:
         self.sky_pwr_spec = (1/self.Nfft**2)*np.abs(np.fft.rfft(g_test_array))**2
         self.recon_pwr_spec = (1/self.Nfft**2)*np.abs(np.fft.rfft(sig-recons_out.cpu().numpy()))**2
         self.sig_pwr_spec = (1/self.Nfft**2)*np.abs(np.fft.rfft(sig))**2
-        #print('Nfft: ',self.Nfft)
-        #print("sky pwr spec shape: ",self.sky_pwr_spec.shape)
-        #print("recon pwr spec shape: ",self.recon_pwr_spec.shape)
 
         print("Epochs: ",self.Nepochs)
         print("N tests: ", ng_test_array.cpu().numpy().shape[0])
@@ -356,7 +283,6 @@ class RFIDetect:
         print("Avg Gaussian RMS: ", self.g_avg_rms)  
         print("Signal to Noise Ratio: ", self.sn)  
         print("Signal to Noise Ratio 2: ", self.sn_2)     
-        #print("Avg amp of Gaussian signal: ",self.avg_gauss)
         
         save_filename = self.save_time + '_epoch_' + str(self.Nepochs).zfill(7) + '_eval_data'
         save_path = os.path.join(self.save_folder, save_filename)
@@ -509,51 +435,6 @@ class RFIDetect:
             plt.savefig(save_path, bbox_inches='tight')
             plt.close()    
             """
-
-            #Encoder layer plots   
-            #plt.figure(figsize=(29,10))
-            #ax = plt.subplot(2,5,1)
-            #plt.plot(sig[test_int,:])
-            #ax.set_title("Input") 
-
-            #ax = plt.subplot(2,5,2)
-            #plt.plot(activation['layerE0'][test_int,:].cpu().numpy())
-            #ax.set_title("Encoder Layer 1")
-            
-            #ax = plt.subplot(2,5,3)
-            #plt.plot(activation['layerE2'][test_int,:].cpu().numpy())
-            #ax.set_title("Encoder Layer 2")
-            
-            #ax = plt.subplot(2,5,4)
-            #plt.plot(activation['layerE4'][test_int,:].cpu().numpy())
-            #ax.set_title("Encoder Layer 3")
-            
-            #ax = plt.subplot(2,5,5)
-            #plt.plot(activation['layerE7'][test_int,:].cpu().numpy())
-            #ax.set_title("Encoder Layer 4")
-                     
-            #Decoder layer plots            
-            #ax = plt.subplot(2,5,6)
-            #plt.plot(activation['layerD0'][test_int,:].cpu().numpy())
-            #ax.set_title("Decoder Layer 1")
-            
-            #ax = plt.subplot(2,5,7)
-            #plt.plot(activation['layerD2'][test_int,:].cpu().numpy())
-            #ax.set_title("Decoder Layer 2")
-            
-            #ax = plt.subplot(2,5,8)
-            #plt.plot(activation['layerD4'][test_int,:].cpu().numpy())
-            #ax.set_title("Decoder Layer 3")
-            
-            #ax = plt.subplot(2,5,9)
-            #plt.plot(activation['layerD6'][test_int,:].cpu().numpy())
-            #ax.set_title("Output")
-            
-            #save_filename = self.save_time + '_epoch_' + str(self.Nepochs).zfill(7) + '_nn_layers_' + str(test_int) + '.png'
-            #save_path = os.path.join(self.save_folder, save_filename)
-            #print('Saving file...{}'.format(save_path))
-            #plt.savefig(save_path, bbox_inches='tight')
-            #plt.close()
         
         #Plot average sky, rfi contaminated, and recovered spectra 
         sky_spec_avg = self.sky_spec_binned.mean(axis=1)
@@ -564,8 +445,6 @@ class RFIDetect:
         plt.plot(range(self.Nbins), sky_spec_avg, color='blue')
         plt.errorbar(range(self.Nbins), recon_spec_avg, yerr=pwr_spec_err_avg, fmt='o', markersize=4, color='green')
         plt.yscale('log')        
-        #plt.plot(range(self.Nbins), self.sky_pwr_spec[test_int,:])
-        #plt.errorbar(range(self.Nfft), self.recon_pwr_spec[test_int,:], yerr=pwr_spec_err, fmt='o')
         plt.legend(['RFI Contaminated Power Spectrum','True Sky Power Spectrum','Recovered Sky Power Spectrum'])
         plt.title('Average of ' + str(len(g_test_array)) + ' Recovered Power Spectra')
         plt.ylabel('Power')
@@ -590,7 +469,6 @@ class RFIDetect:
         plt.close()  
         
         #Plot residuals
-        #plt.plot(range(int(self.Nbins)), sky_spec_avg*0)
         plt.errorbar(range(int(self.Nbins)), (recon_spec_avg-sky_spec_avg)/sky_spec_avg, yerr=pwr_spec_err_avg/sky_spec_avg, fmt='o')
         #plt.yscale('log')
         #plt.legend(['True Sky Power Spectrum','Recovered Power Spectrum Residuals'])
@@ -627,7 +505,3 @@ class RFIDetect:
         plt.savefig(save_path, bbox_inches='tight')
         plt.close()
         """
-            
-        #rand int seed check
-        #print('Numpy rand int check: ',np.random.uniform(0,1,1))
-        #print('Torch rand int check: ',torch.rand(1))

@@ -10,14 +10,13 @@ import matplotlib.pyplot as plt
 if not torch.cuda.is_available():
     print ("Warning: I see no CUDA, this will be slow!")
     
+#Load BMX data   
 class BMXLoader:
     def __init__(self, Np=2048, freq='0000'):
         self.Np = Np
         self.freq = freq
         
     def loadData(self, data_dir, test=False):
-        #print('Data dir:', data_dir+'/**/*_'+self.freq+'.npy')
-        #data_files = glob.glob(data_dir+'/**/*_'+self.freq+'.npy')
         print('Data dir:', data_dir+'/**/*_'+self.freq+'.npy')
         data_files = glob.glob(data_dir+'/**/*_'+self.freq+'.npy')
         
@@ -52,8 +51,7 @@ class BMXLoader:
         #Normalize RMS to RMS of first timestream
         rms_norm = np.std(train_data[0])
         print("RMS normalization factor: ",rms_norm)
-        #Or normalize to RMS ~0.0175, approximate value from test version?
-        #rms_norm = 0.0175
+
         for i in range(np.size(train_data, 0)):
             rms = np.sqrt(np.sum((train_data[i])**2)/self.Np)
             train_data[i] *= (rms_norm/rms)
@@ -63,7 +61,7 @@ class BMXLoader:
             
         return train_data, eval_data
             
-
+#Generate test RFI signal
 class ToyGenerator:
     def __init__(self, Np=1024, Pk=None):
         self.Np = Np
@@ -87,12 +85,6 @@ class ToyGenerator:
         xf *= self.Pk        
         xf /= 4.0*np.sum(np.abs(xf**2)) #Normalize for varying timestream length
         
-        #print("Avg Pk: ", np.mean(self.Pk))
-        #print("Avg xf: ", np.abs(np.mean(xf)))
-        #print("Avg irfft(xf): ", np.abs(np.mean(np.fft.irfft(xf, norm="forward"))))
-        #print("Avg2 irfft(xf): ", np.abs(np.mean(np.fft.irfft(xf)*self.Np)))
-        
-        #return np.fft.irfft(xf, norm="forward") #Forward keywork for fft normalization prevents divide by 1/Nfft on irfft
         return np.fft.irfft(xf)*self.Np #Manual canceling of the normalization for backwards compatibility with numpy <v1.20
 
     def getNonGaussianLocalized(self, freq=(0.2, 0.5), sigma=(20, 50), ampl=(0.1, 0.2)):
@@ -101,7 +93,6 @@ class ToyGenerator:
         freq = np.random.uniform(*freq)
         phase = np.random.uniform(0, 2 * np.pi)
         sigma = np.random.uniform(*sigma)
-        #sigma = sigma[0]
         pos = np.random.uniform(3 * sigma, self.Np - 3 * sigma)
         ampl = np.random.uniform(*ampl)
         rfi = (
@@ -136,16 +127,6 @@ class RFIDetect:
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 16, hidden_dim * 32),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 32, hidden_dim * 64),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 64, hidden_dim * 128),
-                #nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, out_dim, bias=False),
             )
 
@@ -160,16 +141,6 @@ class RFIDetect:
 
             self.main = nn.Sequential(
                 nn.Linear(input_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 128, hidden_dim * 64),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 64, hidden_dim * 32),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim * 32, hidden_dim * 16),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
-                #nn.LeakyReLU(0.02, inplace=False),
-                #nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
                 nn.Linear(hidden_dim, hidden_dim),
                 nn.LeakyReLU(0.02, inplace=False),
@@ -233,39 +204,23 @@ class RFIDetect:
 
         #Training criterion
         recons_criterion = nn.MSELoss()
-        #recons_criterion = nn.L1Loss()
         
         iters = 0 
         
         #Training loop
         for epoch in range(self.Nepochs):
             # iterate through the dataloaders
-            #for i, (g, ng) in enumerate(zip(g_trainloader, ng_trainloader)): 
             for i, s in enumerate(s_trainloader):
                 # set to train mode
                 self.netE.train()
                 self.netD.train()
                              
-                #g = g[0].float().cuda()
-                #ng = ng[0].float().cuda()
-                #s = g + ng
                 s = s[0].float().cuda()
                 
-                #sigs = g + ng
-                #gaussianized = torch.stack([gauss_fact * self.Gaussianize(sig.cpu()) for sig in sigs]).cuda().float()
-                #modsig = sigs + gaussianized
-                #modsig = np.sqrt(1-lamb**2)*sigs + lamb*gaussianized #Normalization option
-                #modsig = g + ng
-                
                 # encode-decode
-                #recons_out = self.netD(self.netE(modsig))
-                #recons_out = self.netD(self.netE(g + ng)) #Reducing number of variables to reduce memory load
                 recons_out = self.netD(self.netE(s))
                 
                 # loss
-                #loss = recons_criterion(modsig - recons_out, lamb*gaussianized) #Normalization option
-                #loss = recons_criterion(g + ng - recons_out, torch.zeros(recons_out.size()).float().cuda())
-                #loss = recons_criterion(g + ng, recons_out) #Reduced number of variables
                 loss = recons_criterion(s, recons_out)
                 
                 # backpropagate and update the weights
@@ -288,34 +243,17 @@ class RFIDetect:
         
         recons_out = []       
         with torch.no_grad():
-            #sigs = test_array.float().cuda()
-            #gaussianized = torch.stack([gauss_fact * torch.from_numpy(self.Gaussianize(sig.cpu().numpy())) for sig in sigs]).cuda().float()
-            #modsig = sigs + gaussianized
-            #modsig = np.sqrt(1-lamb**2)*sigs + lamb*gaussianized
             modsig = torch.from_numpy(test_array).float().cuda()
             recons_out = self.netD(self.netE(modsig))
           
         self.rms = np.std(modsig.cpu().numpy(), axis=1)
         self.avg_rms = np.mean(self.rms)
-        #self.rms = np.sqrt(np.sum((recons_out.cpu().numpy()-ng_test_array.cpu().numpy())**2, axis=1)/self.Np)
-        #self.avg_rms = np.sum(self.rms)/ng_test_array.cpu().numpy().shape[0]
-        #self.rfi_pwr_remaining = np.sum((ng_test_array.cpu().numpy()-recons_out.cpu().numpy())**2, axis=1)
-        #self.frac_rfi_pwr = self.rfi_pwr_remaining/np.sum(ng_test_array.cpu().numpy()**2, axis=1)
-        #self.frac_sig_pwr = self.rfi_pwr_remaining/np.sum(g_test_array.cpu().numpy()**2, axis=1)
-        #self.avg_rfi_pwr_remain = np.sum(self.frac_rfi_pwr)/ng_test_array.cpu().numpy().shape[0]
-        #self.avg_gauss = np.sum(np.abs(g_test_array.cpu().numpy()),axis=None)/(self.Np*g_test_array.cpu().numpy().shape[0])
 
         print("Epochs: ",self.Nepochs)
         print("N tests: ", test_array.shape[0])
         print("Length of timestream: ", self.Np)
         print("Input Timestream RMS: ", self.rms)
         print("Avg RMS for all tests: ", self.avg_rms, "\n") 
-        #print("Timestream Obs-Expect RMS: ", self.rms)
-        #print("Avg RMS for all tests: ", self.avg_rms, "\n")    
-        #print("Fraction of RFI power remaining: ", self.frac_rfi_pwr)
-        #print("Remainder as fraction of signal power: ", self.frac_sig_pwr)
-        #print("Avg of RFI power remaining: ",self.avg_rfi_pwr_remain)
-        #print("Avg amp of Gaussian signal: ",self.avg_gauss)
         
         save_filename = self.save_time + '_epoch_' + str(self.Nepochs).zfill(7) + '_eval_data'
         save_path = os.path.join(self.save_folder, save_filename)
@@ -364,7 +302,3 @@ class RFIDetect:
             
             fig.clf()
             plt.close(fig)
-            
-        #rand int seed check
-        #print('Numpy rand int check: ',np.random.uniform(0,1,1))
-        #print('Torch rand int check: ',torch.rand(1))
